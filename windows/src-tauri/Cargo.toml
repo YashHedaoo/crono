@@ -1,13 +1,13 @@
 [package]
-name = "coucou"
-description = "Coucou for Windows and Linux — Mochi lives at the top of your screen"
-authors = ["Louis Raille"]
+name = "crono"
+description = "Crono for Windows and Linux — Mochi lives at the top of your screen"
+authors = ["Yash Hedaoo"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "coucou_lib"
+name = "crono_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

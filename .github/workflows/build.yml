@@ -77,7 +77,7 @@ jobs:
         run: |
           xcodebuild \
             -project NotchBuddy/NotchBuddy.xcodeproj \
-            -scheme CoucouAppStore \
+            -scheme CronoAppStore \
             -configuration Debug \
             build \
             CODE_SIGNING_ALLOWED=NO \
@@ -107,7 +107,7 @@ jobs:
         run: |
           xcodebuild \
             -project NotchBuddy/NotchBuddy.xcodeproj \
-            -scheme CoucouPhone \
+            -scheme CronoPhone \
             -destination 'generic/platform=iOS' \
             build \
             CODE_SIGNING_ALLOWED=NO

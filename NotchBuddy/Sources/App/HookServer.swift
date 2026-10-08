@@ -19,7 +19,7 @@ final class HookServer: @unchecked Sendable {
     static var socketPath: String {
         #if APPSTORE
         // Container home root keeps path ≤ 103 bytes (sun_path limit on macOS is 104 incl. NUL)
-        // /Users/louis/Library/Containers/fr.louisraille.Coucou/Data/nb.sock = 66 bytes ✓
+        // /Users/louis/Library/Containers/com.yashhedaoo.Crono/Data/nb.sock = 66 bytes ✓
         return NSHomeDirectory() + "/nb.sock"
         #else
         return supportDir.appendingPathComponent("nb.sock").path
@@ -296,10 +296,10 @@ final class HookServer: @unchecked Sendable {
             return
         }
 
-        let coucouKind = payload["coucou_kind"] as? String ?? ""
+        let cronoKind = payload["crono_kind"] as? String ?? ""
 
         // statusline payloads are handled separately — no session, no reveal, no sound
-        if coucouKind == "statusline" {
+        if cronoKind == "statusline" {
             Task { @MainActor in self.processStatusLine(payload: payload) }
             sendLine(fd: fd, text: #"{"ok":true}"#)
             close(fd)
@@ -307,7 +307,7 @@ final class HookServer: @unchecked Sendable {
         }
 
         // AskUserQuestion via --ask PreToolUse hook — hold fd open like PermissionRequest
-        if coucouKind == "ask_user_question" {
+        if cronoKind == "ask_user_question" {
             let toolInput = payload["tool_input"] as? [String: Any] ?? [:]
             if let parsed = AskQuestion.parse(toolInput: toolInput) {
                 Task { @MainActor in self.processQuestionRequest(fd: fd, parsed: parsed, payload: payload) }
@@ -334,7 +334,7 @@ final class HookServer: @unchecked Sendable {
 
     // MARK: - Event → AppState
     // Claude Code events route to the permanent "integration_claude" task.
-    // Events tagged with a valid coucou_agent route to a dynamic "integration_<agent>" task.
+    // Events tagged with a valid crono_agent route to a dynamic "integration_<agent>" task.
     // View switches only happen if VS Code (or the agent pill) is currently focused.
     // When not focused: state updates animate the mini bot in the pill; badge shown for alerts.
 
@@ -349,8 +349,8 @@ final class HookServer: @unchecked Sendable {
         let projectName = aliasProjectName(rawName.isEmpty ? "Session" : rawName)
 
         // Determine which pill this event belongs to.
-        // coucou_agent must be lowercase, digits and hyphens, ≤ 24 chars.
-        let rawAgent = payload["coucou_agent"] as? String ?? ""
+        // crono_agent must be lowercase, digits and hyphens, ≤ 24 chars.
+        let rawAgent = payload["crono_agent"] as? String ?? ""
         let validAgent = Self.validateAgent(rawAgent)
 
         let termProgram = payload["term_program"] as? String ?? ""
@@ -365,7 +365,7 @@ final class HookServer: @unchecked Sendable {
 
         // Routing:
         // • "codex" → agent_codex (GitHub build only: workspace pill, approvals in the notch)
-        // • other valid coucou_agent → external pill (fire-and-forget, no approval card)
+        // • other valid crono_agent → external pill (fire-and-forget, no approval card)
         // • Cursor bundle ID → agent_cursor
         // • VS Code → integration_claude
         #if !APPSTORE
@@ -574,7 +574,7 @@ final class HookServer: @unchecked Sendable {
 
     // MARK: - Agent validation + dynamic pill
 
-    /// Validates a coucou_agent name: lowercase, digits and hyphens, 1–24 chars.
+    /// Validates a crono_agent name: lowercase, digits and hyphens, 1–24 chars.
     /// "claude" is reserved and rejected so it cannot impersonate the Claude Code pill.
     /// Returns the name unchanged if valid, nil otherwise.
     private static func validateAgent(_ raw: String) -> String? {
@@ -660,7 +660,7 @@ final class HookServer: @unchecked Sendable {
         let rawName   = URL(fileURLWithPath: cwd).lastPathComponent
         let projectName = aliasProjectName(rawName.isEmpty ? "Session" : rawName)
 
-        let rawAgent = payload["coucou_agent"] as? String ?? ""
+        let rawAgent = payload["crono_agent"] as? String ?? ""
         let termProgram = payload["term_program"] as? String ?? ""
         let bundleId    = payload["bundle_id"]    as? String ?? ""
         let isCursorEditor = bundleId.lowercased() == "com.todesktop.230313mzl4w4u92"
@@ -669,18 +669,18 @@ final class HookServer: @unchecked Sendable {
             bundleId.lowercased().contains("vscode"))
 
         // Codex, Copilot CLI and Muse Code get the same approval card as Claude Code / Cursor.
-        // Other external agents (any other coucou_agent) answer immediately with "ask"
+        // Other external agents (any other crono_agent) answer immediately with "ask"
         // so the agent re-asks in its own terminal — they do not get a notch card.
         #if !APPSTORE
         let isCodexRequest   = rawAgent == "codex"
         let isCopilotRequest = rawAgent == "copilot"
         let isMuseRequest    = rawAgent == "muse"
-        // isHermesRequest is true only when the plugin sent coucou_has_transport: true,
+        // isHermesRequest is true only when the plugin sent crono_has_transport: true,
         // meaning register_approval_transport is wired and Hermes will honour our choice.
         // Without that flag the request falls through to "ask" so Hermes handles it natively.
         let isHermesRequest  = rawAgent == "hermes"
             && UserDefaults.standard.bool(forKey: "hermesApprovalsEnabled")
-            && (payload["coucou_has_transport"] as? Bool == true)
+            && (payload["crono_has_transport"] as? Bool == true)
         #else
         let isCodexRequest   = false
         let isCopilotRequest = false
@@ -873,7 +873,7 @@ final class HookServer: @unchecked Sendable {
         let rawName   = URL(fileURLWithPath: cwd).lastPathComponent
         let projectName = aliasProjectName(rawName.isEmpty ? "Session" : rawName)
 
-        let rawAgent    = payload["coucou_agent"] as? String ?? ""
+        let rawAgent    = payload["crono_agent"] as? String ?? ""
         let termProgram = payload["term_program"]  as? String ?? ""
         let bundleId    = payload["bundle_id"]     as? String ?? ""
         let isCursorEditor = bundleId.lowercased() == "com.todesktop.230313mzl4w4u92"
@@ -1178,7 +1178,7 @@ final class HookServer: @unchecked Sendable {
 
     // MARK: - Outdated hook detection
 
-    /// Returns true if settings.json has a Coucou hook that needs updating:
+    /// Returns true if settings.json has a Crono hook that needs updating:
     /// either a PermissionRequest hook with timeout < 120s, or the AskUserQuestion
     /// PreToolUse matcher is missing (requires Claude Code 2.1.85+).
     static func hooksNeedUpdate() -> Bool {
@@ -1189,16 +1189,16 @@ final class HookServer: @unchecked Sendable {
               let hooks = settings["hooks"] as? [String: Any] else {
             return false
         }
-        // Track whether any Coucou hook is installed at all
-        var hasCoucouHooks = false
+        // Track whether any Crono hook is installed at all
+        var hasCronoHooks = false
 
         if let permReqHooks = hooks["PermissionRequest"] as? [[String: Any]] {
             for matcher in permReqHooks {
                 if let hookList = matcher["hooks"] as? [[String: Any]] {
                     for hook in hookList {
                         if let cmd = hook["command"] as? String,
-                           cmd.contains("NotchBuddy") || cmd.contains("coucou") {
-                            hasCoucouHooks = true
+                           cmd.contains("NotchBuddy") || cmd.contains("crono") {
+                            hasCronoHooks = true
                             if let timeout = hook["timeout"] as? Int, timeout < 120 { return true }
                         }
                     }
@@ -1207,13 +1207,13 @@ final class HookServer: @unchecked Sendable {
         }
 
         // Check that the AskUserQuestion PreToolUse entry exists
-        if hasCoucouHooks {
+        if hasCronoHooks {
             let preToolHooks = hooks["PreToolUse"] as? [[String: Any]] ?? []
             let hasAskEntry = preToolHooks.contains { m in
                 (m["matcher"] as? String) == "AskUserQuestion"
                 && (m["hooks"] as? [[String: Any]])?.contains {
                     let cmd = $0["command"] as? String ?? ""
-                    return cmd.contains("NotchBuddy") || cmd.contains("coucou")
+                    return cmd.contains("NotchBuddy") || cmd.contains("crono")
                 } ?? false
             }
             if !hasAskEntry { return true }
@@ -1272,7 +1272,7 @@ final class HookServer: @unchecked Sendable {
         var hooks = try ClaudeSettingsFile.hooks(in: settings, name: "settings.json")
         for (event, timeout) in events {
             var existing = try ClaudeSettingsFile.hookGroups(in: hooks, event: event, name: "settings.json")
-            existing.removeAll { ($0["hooks"] as? [[String: Any]])?.contains { ($0["command"] as? String)?.contains("NotchBuddy") == true || ($0["command"] as? String)?.contains("coucou") == true } ?? false }
+            existing.removeAll { ($0["hooks"] as? [[String: Any]])?.contains { ($0["command"] as? String)?.contains("NotchBuddy") == true || ($0["command"] as? String)?.contains("crono") == true } ?? false }
             existing.append(["hooks": [["type": "command", "command": quotedCmd, "timeout": timeout]]])
             hooks[event] = existing
         }
@@ -1300,7 +1300,7 @@ final class HookServer: @unchecked Sendable {
                 matchers.removeAll { matcher in
                     (matcher["hooks"] as? [[String: Any]])?.contains {
                         ($0["command"] as? String)?.contains("NotchBuddy") == true ||
-                        ($0["command"] as? String)?.contains("coucou") == true
+                        ($0["command"] as? String)?.contains("crono") == true
                     } ?? false
                 }
                 if matchers.isEmpty { hooks.removeValue(forKey: key) }
@@ -1363,7 +1363,7 @@ final class HookServer: @unchecked Sendable {
             try? clCheck.run()
             clCheck.waitUntilExit()
             if clCheck.terminationStatus != 0 {
-                throw NSError(domain: "Coucou", code: 1,
+                throw NSError(domain: "Crono", code: 1,
                               userInfo: [NSLocalizedDescriptionKey:
                                   "Command Line Tools are required but not installed. Run: xcode-select --install"])
             }
@@ -1450,20 +1450,20 @@ final class HookServer: @unchecked Sendable {
     func installAndWriteClaudeHooksAppStore(claudeURL: URL) throws {
         let (data, original) = try buildHooksData(claudeURL: claudeURL)
 
-        // Write nb-hook (shell wrapper) + nb-hook.py (Python relay) into ~/.claude/coucou/
-        let coucouDir = claudeURL.appendingPathComponent("coucou")
-        try FileManager.default.createDirectory(at: coucouDir, withIntermediateDirectories: true)
-        let wrapperURL = coucouDir.appendingPathComponent("nb-hook")
+        // Write nb-hook (shell wrapper) + nb-hook.py (Python relay) into ~/.claude/crono/
+        let cronoDir = claudeURL.appendingPathComponent("crono")
+        try FileManager.default.createDirectory(at: cronoDir, withIntermediateDirectories: true)
+        let wrapperURL = cronoDir.appendingPathComponent("nb-hook")
         try nbHookShellWrapper.write(to: wrapperURL, atomically: true, encoding: .utf8)
         _ = try? FileManager.default.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: wrapperURL.path)
-        let pyURL = coucouDir.appendingPathComponent("nb-hook.py")
+        let pyURL = cronoDir.appendingPathComponent("nb-hook.py")
         try nbHookPythonAppStore.write(to: pyURL, atomically: true, encoding: .utf8)
         _ = try? FileManager.default.setAttributes([.posixPermissions: 0o755 as NSNumber], ofItemAtPath: pyURL.path)
 
         // Write settings.json (with backup)
         let settingsURL = claudeURL.appendingPathComponent("settings.json")
         try ClaudeSettingsFile.write(data, to: settingsURL, expecting: original)
-        UserDefaults.standard.set(true, forKey: "coucouHooksInstalled")
+        UserDefaults.standard.set(true, forKey: "cronoHooksInstalled")
     }
 
     func uninstallClaudeHooksAppStore(claudeURL: URL) throws {
@@ -1475,7 +1475,7 @@ final class HookServer: @unchecked Sendable {
             if var matchers = hooks[key] as? [[String: Any]] {
                 matchers.removeAll { matcher in
                     (matcher["hooks"] as? [[String: Any]])?.contains {
-                        ($0["command"] as? String)?.contains("coucou") == true ||
+                        ($0["command"] as? String)?.contains("crono") == true ||
                         ($0["command"] as? String)?.contains("NotchBuddy") == true
                     } ?? false
                 }
@@ -1486,7 +1486,7 @@ final class HookServer: @unchecked Sendable {
         settings["hooks"] = hooks
         let newData = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
         try ClaudeSettingsFile.write(newData, to: settingsURL, expecting: snapshot.bytes)
-        UserDefaults.standard.set(false, forKey: "coucouHooksInstalled")
+        UserDefaults.standard.set(false, forKey: "cronoHooksInstalled")
     }
 
     private func buildHooksData(claudeURL: URL) throws -> (data: Data, original: Data?) {
@@ -1495,7 +1495,7 @@ final class HookServer: @unchecked Sendable {
         let snapshot = try ClaudeSettingsFile.read(at: settingsURL)
         var settings = snapshot.object
         // Derive hook path from the panel-selected claudeURL (real ~/.claude, not container)
-        let hookPath = claudeURL.appendingPathComponent("coucou/nb-hook").path
+        let hookPath = claudeURL.appendingPathComponent("crono/nb-hook").path
         let quotedCmd = "/bin/sh \"\(hookPath.replacingOccurrences(of: "\"", with: "\\\""))\""
         let events: [(String, Int)] = [
             ("SessionStart", 10), ("SessionEnd", 10),
@@ -1511,7 +1511,7 @@ final class HookServer: @unchecked Sendable {
         for (event, timeout) in events {
             var existing = try ClaudeSettingsFile.hookGroups(in: hooks, event: event, name: "settings.json")
             existing.removeAll { ($0["hooks"] as? [[String: Any]])?.contains {
-                ($0["command"] as? String)?.contains("coucou") == true ||
+                ($0["command"] as? String)?.contains("crono") == true ||
                 ($0["command"] as? String)?.contains("NotchBuddy") == true
             } ?? false }
             existing.append(["hooks": [["type": "command", "command": quotedCmd, "timeout": timeout]]])
@@ -1532,19 +1532,19 @@ final class HookServer: @unchecked Sendable {
 
     // MARK: - Claude Code installed-state detection (both builds)
 
-    /// True when ~/.claude/settings.json already routes Claude Code events to Coucou.
+    /// True when ~/.claude/settings.json already routes Claude Code events to Crono.
     /// Cursor sessions ride on these same hooks, so they share this state.
     static func claudeHooksInstalled() -> Bool {
         #if APPSTORE
         // Sandboxed: can't read ~/.claude directly — check the install flag set on write.
-        return UserDefaults.standard.bool(forKey: "coucouHooksInstalled")
+        return UserDefaults.standard.bool(forKey: "cronoHooksInstalled")
         #else
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json")
         guard let data = try? Data(contentsOf: url),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return false }
-        return coucouHooksPresent(inSettings: json)
+        return cronoHooksPresent(inSettings: json)
         #endif
     }
 
@@ -1584,8 +1584,8 @@ final class HookServer: @unchecked Sendable {
     static func agyHooksInstalled() -> Bool {
         guard let data = try? Data(contentsOf: agyHooksURL),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let coucou = root["coucou"] else { return false }
-        let json = (try? JSONSerialization.data(withJSONObject: coucou))
+              let crono = root["crono"] else { return false }
+        let json = (try? JSONSerialization.data(withJSONObject: crono))
             .flatMap { String(data: $0, encoding: .utf8) } ?? ""
         return json.contains("nb-hook")
     }
@@ -1599,7 +1599,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.geminiSettingsURL
         let exists = FileManager.default.fileExists(atPath: url.path)
         if !install && !exists {
-            throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+            throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                 NSLocalizedDescriptionKey: "No Gemini CLI hooks to remove."
             ])
         }
@@ -1615,7 +1615,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.geminiSettingsURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
+            throw NSError(domain: "Crono", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "~/.gemini/settings.json changed since preview. Refresh and try again."
             ])
         }
@@ -1628,8 +1628,8 @@ final class HookServer: @unchecked Sendable {
         var settings = try Self.strictReadJSONObject(at: Self.geminiSettingsURL,
                                                      label: "~/.gemini/settings.json")
         if let raw = settings["hooks"], !(raw is [String: Any]) {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "~/.gemini/settings.json: \"hooks\" has an unexpected type — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "~/.gemini/settings.json: \"hooks\" has an unexpected type — Crono has not touched it."
             ])
         }
         let base = hookBase()
@@ -1645,8 +1645,8 @@ final class HookServer: @unchecked Sendable {
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for (geminiEvent, normalizedEvent, timeout) in events {
             if let raw = hooks[geminiEvent], !(raw is [[String: Any]]) {
-                throw NSError(domain: "Coucou", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: "~/.gemini/settings.json: \"hooks\"[\"\(geminiEvent)\"] has an unexpected type — Coucou has not touched it."
+                throw NSError(domain: "Crono", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "~/.gemini/settings.json: \"hooks\"[\"\(geminiEvent)\"] has an unexpected type — Crono has not touched it."
                 ])
             }
             var groups = hooks[geminiEvent] as? [[String: Any]] ?? []
@@ -1669,8 +1669,8 @@ final class HookServer: @unchecked Sendable {
         var settings = try Self.strictReadJSONObject(at: Self.geminiSettingsURL,
                                                      label: "~/.gemini/settings.json")
         if let raw = settings["hooks"], !(raw is [String: Any]) {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "~/.gemini/settings.json: \"hooks\" has an unexpected type — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "~/.gemini/settings.json: \"hooks\" has an unexpected type — Crono has not touched it."
             ])
         }
         if var hooks = settings["hooks"] as? [String: Any] {
@@ -1695,7 +1695,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.agyHooksURL
         let exists = FileManager.default.fileExists(atPath: url.path)
         if !install && !exists {
-            throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+            throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                 NSLocalizedDescriptionKey: "No Antigravity hooks to remove."
             ])
         }
@@ -1711,7 +1711,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.agyHooksURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
+            throw NSError(domain: "Crono", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "~/.gemini/config/hooks.json changed since preview. Refresh and try again."
             ])
         }
@@ -1726,20 +1726,20 @@ final class HookServer: @unchecked Sendable {
         let base = hookBase()
         // PreToolUse / PostToolUse: tool-level hooks — use matcher group
         // PreInvocation / PostInvocation / Stop: lifecycle hooks — direct handler, no matcher
-        var coucou: [String: Any] = [:]
+        var crono: [String: Any] = [:]
         for event in ["PreToolUse", "PostToolUse"] {
             let hook: [String: Any] = ["type": "command",
                                        "command": "\(base) --agent antigravity \(event)",
                                        "timeout": 10]
-            coucou[event] = [["matcher": "*", "hooks": [hook]]]
+            crono[event] = [["matcher": "*", "hooks": [hook]]]
         }
         for event in ["PreInvocation", "PostInvocation", "Stop"] {
             let hook: [String: Any] = ["type": "command",
                                        "command": "\(base) --agent antigravity \(event)",
                                        "timeout": 10]
-            coucou[event] = [hook]
+            crono[event] = [hook]
         }
-        root["coucou"] = coucou
+        root["crono"] = crono
         return try JSONSerialization.data(withJSONObject: root,
                                          options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
     }
@@ -1747,7 +1747,7 @@ final class HookServer: @unchecked Sendable {
     private func withoutAgyHooks() throws -> Data {
         var root = try Self.strictReadJSONObject(at: Self.agyHooksURL,
                                                  label: "~/.gemini/config/hooks.json")
-        root.removeValue(forKey: "coucou")
+        root.removeValue(forKey: "crono")
         return try JSONSerialization.data(withJSONObject: root,
                                          options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
     }
@@ -1767,13 +1767,13 @@ final class HookServer: @unchecked Sendable {
         let data: Data
         do { data = try Data(contentsOf: url) }
         catch {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "\(label) cannot be read — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "\(label) cannot be read — Crono has not touched it."
             ])
         }
         guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "\(label) is not valid JSON — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "\(label) is not valid JSON — Crono has not touched it."
             ])
         }
         return obj
@@ -1790,7 +1790,7 @@ final class HookServer: @unchecked Sendable {
                 .appendingPathComponent("\(suffix).bak-\(fmt.string(from: Date()))")
             do { try fm.copyItem(at: url, to: backupURL) }
             catch {
-                throw NSError(domain: "Coucou", code: 3, userInfo: [
+                throw NSError(domain: "Crono", code: 3, userInfo: [
                     NSLocalizedDescriptionKey: "Could not back up \(url.lastPathComponent): \(error.localizedDescription)"
                 ])
             }
@@ -1824,7 +1824,7 @@ final class HookServer: @unchecked Sendable {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/hooks.json")
     }
 
-    /// True when ~/.codex/hooks.json already routes Codex events to Coucou's nb-hook.
+    /// True when ~/.codex/hooks.json already routes Codex events to Crono's nb-hook.
     static func codexHooksInstalled() -> Bool {
         guard let data = try? Data(contentsOf: codexHooksURL),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -1850,7 +1850,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.codexHooksURL
         let exists = FileManager.default.fileExists(atPath: url.path)
         if !install && !exists {
-            throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+            throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                 NSLocalizedDescriptionKey: "No Codex hooks to remove."
             ])
         }
@@ -1866,7 +1866,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.codexHooksURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
+            throw NSError(domain: "Crono", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "~/.codex/hooks.json changed since preview. Refresh and try again."
             ])
         }
@@ -1878,8 +1878,8 @@ final class HookServer: @unchecked Sendable {
     private func buildCodexHooksData() throws -> Data {
         var root = try Self.strictReadJSONObject(at: Self.codexHooksURL, label: "~/.codex/hooks.json")
         if let raw = root["hooks"], !(raw is [String: Any]) {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "~/.codex/hooks.json: \"hooks\" has an unexpected type — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "~/.codex/hooks.json: \"hooks\" has an unexpected type — Crono has not touched it."
             ])
         }
         let base = hookBase()
@@ -1889,7 +1889,7 @@ final class HookServer: @unchecked Sendable {
             ("SessionStart",    10,  nil),
             ("UserPromptSubmit", 10, nil),
             ("PreToolUse",      10,  nil),
-            ("PermissionRequest", 120, "Waiting for your answer in the notch (Coucou)"),
+            ("PermissionRequest", 120, "Waiting for your answer in the notch (Crono)"),
             ("PostToolUse",     10,  nil),
             ("Stop",            10,  nil),
             ("SubagentStart",   10,  nil),
@@ -1900,12 +1900,12 @@ final class HookServer: @unchecked Sendable {
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         for (event, timeout, statusMsg) in events {
             if let raw = hooks[event], !(raw is [[String: Any]]) {
-                throw NSError(domain: "Coucou", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: "~/.codex/hooks.json: \"hooks\"[\"\(event)\"] has an unexpected type — Coucou has not touched it."
+                throw NSError(domain: "Crono", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "~/.codex/hooks.json: \"hooks\"[\"\(event)\"] has an unexpected type — Crono has not touched it."
                 ])
             }
             var groups = hooks[event] as? [[String: Any]] ?? []
-            // Remove existing Coucou entries
+            // Remove existing Crono entries
             groups = removeNbHookEntries(from: groups)
             var hookEntry: [String: Any] = [
                 "type": "command",
@@ -1924,8 +1924,8 @@ final class HookServer: @unchecked Sendable {
     private func withoutCodexHooks() throws -> Data {
         var root = try Self.strictReadJSONObject(at: Self.codexHooksURL, label: "~/.codex/hooks.json")
         if let raw = root["hooks"], !(raw is [String: Any]) {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "~/.codex/hooks.json: \"hooks\" has an unexpected type — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "~/.codex/hooks.json: \"hooks\" has an unexpected type — Crono has not touched it."
             ])
         }
         if var hooks = root["hooks"] as? [String: Any] {
@@ -1945,10 +1945,10 @@ final class HookServer: @unchecked Sendable {
 
     static var copilotHooksURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".copilot/hooks/coucou.json")
+            .appendingPathComponent(".copilot/hooks/crono.json")
     }
 
-    /// True when ~/.copilot/hooks/coucou.json already routes Copilot events to Coucou's nb-hook.
+    /// True when ~/.copilot/hooks/crono.json already routes Copilot events to Crono's nb-hook.
     static func copilotHooksInstalled() -> Bool {
         guard let data = try? Data(contentsOf: copilotHooksURL),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -1970,7 +1970,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.copilotHooksURL
         let exists = FileManager.default.fileExists(atPath: url.path)
         if !install && !exists {
-            throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+            throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                 NSLocalizedDescriptionKey: "No Copilot hooks to remove."
             ])
         }
@@ -1991,12 +1991,12 @@ final class HookServer: @unchecked Sendable {
         let url = Self.copilotHooksURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "~/.copilot/hooks/coucou.json changed since preview. Refresh and try again."
+            throw NSError(domain: "Crono", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "~/.copilot/hooks/crono.json changed since preview. Refresh and try again."
             ])
         }
         if let data = _pendingCopilotData {
-            try writeJSONFile(data, to: url, suffix: "coucou.json")
+            try writeJSONFile(data, to: url, suffix: "crono.json")
         } else {
             // Uninstall: delete the file entirely
             try FileManager.default.removeItem(at: url)
@@ -2007,10 +2007,10 @@ final class HookServer: @unchecked Sendable {
 
     private func buildCopilotHooksData() throws -> Data {
         var root = try Self.strictReadJSONObject(at: Self.copilotHooksURL,
-                                                  label: "~/.copilot/hooks/coucou.json")
+                                                  label: "~/.copilot/hooks/crono.json")
         if let raw = root["hooks"], !(raw is [String: Any]) {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "~/.copilot/hooks/coucou.json: \"hooks\" has an unexpected type — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "~/.copilot/hooks/crono.json: \"hooks\" has an unexpected type — Crono has not touched it."
             ])
         }
         let base = hookBase()
@@ -2030,8 +2030,8 @@ final class HookServer: @unchecked Sendable {
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         for (event, timeout) in events {
             if let raw = hooks[event], !(raw is [[String: Any]]) {
-                throw NSError(domain: "Coucou", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: "~/.copilot/hooks/coucou.json: \"hooks\"[\"\(event)\"] has an unexpected type — Coucou has not touched it."
+                throw NSError(domain: "Crono", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "~/.copilot/hooks/crono.json: \"hooks\"[\"\(event)\"] has an unexpected type — Crono has not touched it."
                 ])
             }
             var entries = hooks[event] as? [[String: Any]] ?? []
@@ -2047,7 +2047,7 @@ final class HookServer: @unchecked Sendable {
 
     private func withoutCopilotHooks() throws -> Data {
         var root = try Self.strictReadJSONObject(at: Self.copilotHooksURL,
-                                                  label: "~/.copilot/hooks/coucou.json")
+                                                  label: "~/.copilot/hooks/crono.json")
         if var hooks = root["hooks"] as? [String: Any] {
             for key in hooks.keys {
                 if var entries = hooks[key] as? [[String: Any]] {
@@ -2068,7 +2068,7 @@ final class HookServer: @unchecked Sendable {
             .appendingPathComponent(".config/muse/settings.json")
     }
 
-    /// True when ~/.config/muse/settings.json already routes Muse events to Coucou's nb-hook.
+    /// True when ~/.config/muse/settings.json already routes Muse events to Crono's nb-hook.
     static func museHooksInstalled() -> Bool {
         guard let data = try? Data(contentsOf: museSettingsURL),
               let settings = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -2096,7 +2096,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.museSettingsURL
         let exists = FileManager.default.fileExists(atPath: url.path)
         if !install && !exists {
-            throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+            throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                 NSLocalizedDescriptionKey: "No Muse Code hooks to remove."
             ])
         }
@@ -2112,7 +2112,7 @@ final class HookServer: @unchecked Sendable {
         let url = Self.museSettingsURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
+            throw NSError(domain: "Crono", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "~/.config/muse/settings.json changed since preview. Refresh and try again."
             ])
         }
@@ -2125,8 +2125,8 @@ final class HookServer: @unchecked Sendable {
         var settings = try Self.strictReadJSONObject(at: Self.museSettingsURL,
                                                       label: "~/.config/muse/settings.json")
         if let raw = settings["hooks"], !(raw is [String: Any]) {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "~/.config/muse/settings.json: \"hooks\" has an unexpected type — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "~/.config/muse/settings.json: \"hooks\" has an unexpected type — Crono has not touched it."
             ])
         }
         let base = hookBase()
@@ -2144,8 +2144,8 @@ final class HookServer: @unchecked Sendable {
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         for (event, timeoutSec) in events {
             if let raw = hooks[event], !(raw is [[String: Any]]) {
-                throw NSError(domain: "Coucou", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: "~/.config/muse/settings.json: \"hooks\"[\"\(event)\"] has an unexpected type — Coucou has not touched it."
+                throw NSError(domain: "Crono", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "~/.config/muse/settings.json: \"hooks\"[\"\(event)\"] has an unexpected type — Crono has not touched it."
                 ])
             }
             var groups = hooks[event] as? [[String: Any]] ?? []
@@ -2168,8 +2168,8 @@ final class HookServer: @unchecked Sendable {
         var settings = try Self.strictReadJSONObject(at: Self.museSettingsURL,
                                                       label: "~/.config/muse/settings.json")
         if let raw = settings["hooks"], !(raw is [String: Any]) {
-            throw NSError(domain: "Coucou", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "~/.config/muse/settings.json: \"hooks\" has an unexpected type — Coucou has not touched it."
+            throw NSError(domain: "Crono", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "~/.config/muse/settings.json: \"hooks\" has an unexpected type — Crono has not touched it."
             ])
         }
         if var hooks = settings["hooks"] as? [String: Any] {
@@ -2192,7 +2192,7 @@ final class HookServer: @unchecked Sendable {
 
     static var openCodePluginURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/opencode/plugins/coucou.js")
+            .appendingPathComponent(".config/opencode/plugins/crono.js")
     }
 
     static func openCodePluginInstalled() -> Bool {
@@ -2205,8 +2205,8 @@ final class HookServer: @unchecked Sendable {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         return """
-// Coucou hook plugin for OpenCode — generated by Coucou.app
-// Forwards every event to the Coucou notch (fire-and-forget, never blocks).
+// Crono hook plugin for OpenCode — generated by Crono.app
+// Forwards every event to the Crono notch (fire-and-forget, never blocks).
 import { spawn } from 'node:child_process';
 
 const HOOK = '\(path)';
@@ -2228,7 +2228,7 @@ function forward(hook_event_name, payload) {
   p.unref();
 }
 
-export const CoucouPlugin = async (_ctx) => ({
+export const CronoPlugin = async (_ctx) => ({
   event: async ({ event }) => {
     const hook_event_name = EVENT_MAP[event.type];
     if (!hook_event_name) return;
@@ -2265,7 +2265,7 @@ export const CoucouPlugin = async (_ctx) => ({
         let exists = FileManager.default.fileExists(atPath: url.path)
         if !install {
             guard exists else {
-                throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+                throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                     NSLocalizedDescriptionKey: "No OpenCode plugin to remove."
                 ])
             }
@@ -2286,8 +2286,8 @@ export const CoucouPlugin = async (_ctx) => ({
         let url = Self.openCodePluginURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "~/.config/opencode/plugins/coucou.js changed since preview. Refresh and try again."
+            throw NSError(domain: "Crono", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "~/.config/opencode/plugins/crono.js changed since preview. Refresh and try again."
             ])
         }
         guard let content = _pendingOpenCodeContent else {
@@ -2300,7 +2300,7 @@ export const CoucouPlugin = async (_ctx) => ({
             fmt.locale = Locale(identifier: "en_US_POSIX")
             fmt.dateFormat = "yyyyMMdd-HHmmss"
             let backupURL = url.deletingLastPathComponent()
-                .appendingPathComponent("coucou.js.bak-\(fmt.string(from: Date()))")
+                .appendingPathComponent("crono.js.bak-\(fmt.string(from: Date()))")
             try fm.copyItem(at: url, to: backupURL)
         }
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -2313,9 +2313,9 @@ export const CoucouPlugin = async (_ctx) => ({
         let url = Self.openCodePluginURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        guard content.contains("generated by Coucou") else {
-            throw NSError(domain: "Coucou", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "~/.config/opencode/plugins/coucou.js was not generated by Coucou — not deleting it."
+        guard content.contains("generated by Crono") else {
+            throw NSError(domain: "Crono", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "~/.config/opencode/plugins/crono.js was not generated by Crono — not deleting it."
             ])
         }
         try FileManager.default.removeItem(at: url)
@@ -2328,7 +2328,7 @@ export const CoucouPlugin = async (_ctx) => ({
 
     static var ampPluginURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/amp/plugins/coucou.ts")
+            .appendingPathComponent(".config/amp/plugins/crono.ts")
     }
 
     static func ampPluginInstalled() -> Bool {
@@ -2341,8 +2341,8 @@ export const CoucouPlugin = async (_ctx) => ({
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         return """
-// Coucou hook plugin for Amp — generated by Coucou.app
-// Forwards every event to the Coucou notch (display only, never blocks).
+// Crono hook plugin for Amp — generated by Crono.app
+// Forwards every event to the Crono notch (display only, never blocks).
 import { spawn } from 'node:child_process';
 
 const HOOK = '\(path)';
@@ -2373,7 +2373,7 @@ export default function (amp: any): void {
         let exists = FileManager.default.fileExists(atPath: url.path)
         if !install {
             guard exists else {
-                throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+                throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                     NSLocalizedDescriptionKey: "No Amp plugin to remove."
                 ])
             }
@@ -2394,8 +2394,8 @@ export default function (amp: any): void {
         let url = Self.ampPluginURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "~/.config/amp/plugins/coucou.ts changed since preview. Refresh and try again."
+            throw NSError(domain: "Crono", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "~/.config/amp/plugins/crono.ts changed since preview. Refresh and try again."
             ])
         }
         guard let content = _pendingAmpContent else {
@@ -2408,7 +2408,7 @@ export default function (amp: any): void {
             fmt.locale = Locale(identifier: "en_US_POSIX")
             fmt.dateFormat = "yyyyMMdd-HHmmss"
             let backupURL = url.deletingLastPathComponent()
-                .appendingPathComponent("coucou.ts.bak-\(fmt.string(from: Date()))")
+                .appendingPathComponent("crono.ts.bak-\(fmt.string(from: Date()))")
             try fm.copyItem(at: url, to: backupURL)
         }
         try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -2421,9 +2421,9 @@ export default function (amp: any): void {
         let url = Self.ampPluginURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        guard content.contains("generated by Coucou") else {
-            throw NSError(domain: "Coucou", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "~/.config/amp/plugins/coucou.ts was not generated by Coucou — not deleting it."
+        guard content.contains("generated by Crono") else {
+            throw NSError(domain: "Crono", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "~/.config/amp/plugins/crono.ts was not generated by Crono — not deleting it."
             ])
         }
         try FileManager.default.removeItem(at: url)
@@ -2438,7 +2438,7 @@ export default function (amp: any): void {
 
     static var hermesPluginDir: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".hermes/plugins/coucou")
+            .appendingPathComponent(".hermes/plugins/crono")
     }
     static var hermesInitPyURL: URL { hermesPluginDir.appendingPathComponent("__init__.py") }
     static var hermesPluginYamlURL: URL { hermesPluginDir.appendingPathComponent("plugin.yaml") }
@@ -2538,8 +2538,8 @@ export default function (amp: any): void {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         return """
-# Coucou hook plugin for Hermes Agent — generated by Coucou.app
-# Session/tool events → Coucou notch (fire-and-forget, never blocks).
+# Crono hook plugin for Hermes Agent — generated by Crono.app
+# Session/tool events → Crono notch (fire-and-forget, never blocks).
 # Approval transport: uses register_approval_transport when available (future Hermes),
 # falls back to pre_approval_request observer-only hook (hermes 0.15.x).
 import json, subprocess, threading
@@ -2628,7 +2628,7 @@ def register(ctx) -> None:
     ctx.register_hook('post_tool_call',   post_tool_call)
 
     if hasattr(ctx, 'register_approval_transport'):
-        # Hermes version supports transport API — Coucou shows a real Allow/Deny card
+        # Hermes version supports transport API — Crono shows a real Allow/Deny card
         # and returns the user's choice to Hermes.
         def _present(request) -> object:
             sid = (getattr(request, 'session_id', None)
@@ -2643,8 +2643,8 @@ def register(ctx) -> None:
             payload = json.dumps({
                 'hook_event_name': 'PermissionRequest',
                 'session_id': sid,
-                'coucou_agent': 'hermes',
-                'coucou_has_transport': True,
+                'crono_agent': 'hermes',
+                'crono_has_transport': True,
                 'tool_name': cmd,
                 'tool_input': {'command': cmd, 'description': desc},
             }).encode()
@@ -2664,7 +2664,7 @@ def register(ctx) -> None:
                 # Fall back to Hermes' native prompt on any error.
                 return request.respond('deny')
 
-        ctx.register_approval_transport('coucou', _present)
+        ctx.register_approval_transport('crono', _present)
     else:
         # Observer-only hook (hermes 0.15.x): Hermes still controls the decision.
         # Fire a PreToolUse-style step so the notch shows "⏳ Approval pending in Hermes"
@@ -2686,12 +2686,12 @@ def register(ctx) -> None:
     }
 
     private static let hermesPluginYaml = """
-name: coucou
+name: crono
 version: "1.0"
-description: Coucou notch integration — generated by Coucou.app
+description: Crono notch integration — generated by Crono.app
 """
 
-    /// Merges Coucou keys into a Hermes config.yaml string without touching other settings.
+    /// Merges Crono keys into a Hermes config.yaml string without touching other settings.
     ///
     /// Returns the merged YAML string, or nil if the file uses an unsupported structure
     /// (flow maps `{…}`, YAML anchors `&`, multi-document `---`) that the line-level
@@ -2747,7 +2747,7 @@ description: Coucou notch integration — generated by Coucou.app
         }
 
         // --- security.approval ---
-        let transportLine = "\(ind2)transport: coucou"
+        let transportLine = "\(ind2)transport: crono"
         let fallbackLine  = "\(ind2)transport_fallback: builtin"
 
         func ensureApprovalTransport() {
@@ -2789,19 +2789,19 @@ description: Coucou notch integration — generated by Coucou.app
         }
 
         func removeApprovalTransport() {
-            // Only remove exact Coucou-written transport keys; don't touch unrelated keys.
+            // Only remove exact Crono-written transport keys; don't touch unrelated keys.
             lines.removeAll { line in
                 let t = line.trimmingCharacters(in: .whitespaces)
-                return t == "transport: coucou" || t == "transport_fallback: builtin"
+                return t == "transport: crono" || t == "transport_fallback: builtin"
             }
         }
 
         // --- plugins.enabled ---
-        // Note: actual plugin enable/disable is done via `hermes plugins enable/disable coucou`
+        // Note: actual plugin enable/disable is done via `hermes plugins enable/disable crono`
         // CLI after writing/removing the plugin files. This block ensures the preview
         // shows the complete intended state of config.yaml.
-        func ensureCoucouPlugin() {
-            // "Already present" = coucou in the plugins.enabled list specifically.
+        func ensureCronoPlugin() {
+            // "Already present" = crono in the plugins.enabled list specifically.
             // Check by finding plugins: section first, then enabled: sub-key within it.
             if let pluginsIdx = topLevelIndex(key: "plugins") {
                 let pluginsRange = sectionRange(from: pluginsIdx)
@@ -2812,41 +2812,41 @@ description: Coucou notch integration — generated by Coucou.app
                     let trimmed = enabledLine.trimmingCharacters(in: .whitespaces)
                     if trimmed.contains("[") && trimmed.contains("]") {
                         // Inline list: enabled: [x, y]  or  enabled: []
-                        if trimmed.contains("coucou") { return }   // already present
+                        if trimmed.contains("crono") { return }   // already present
                         if trimmed == "enabled: []" || trimmed == "enabled:[]" {
                             // Empty inline list → expand to block entry
                             let prefix = enabledLine.prefix(while: { $0 == " " })
                             lines[enabledIdx] = "\(prefix)enabled:"
-                            lines.insert("\(prefix)\(ind)- coucou", at: enabledIdx + 1)
+                            lines.insert("\(prefix)\(ind)- crono", at: enabledIdx + 1)
                         } else {
-                            lines[enabledIdx] = enabledLine.replacingOccurrences(of: "]", with: ", coucou]")
+                            lines[enabledIdx] = enabledLine.replacingOccurrences(of: "]", with: ", crono]")
                         }
                     } else {
-                        // Block list — check if coucou is already a child of this enabled:
+                        // Block list — check if crono is already a child of this enabled:
                         let enabledRange = sectionRange(from: enabledIdx)
                         let alreadyPresent = (enabledRange.lowerBound + 1 ..< enabledRange.upperBound)
-                            .contains { lines[$0].trimmingCharacters(in: .whitespaces) == "- coucou" }
+                            .contains { lines[$0].trimmingCharacters(in: .whitespaces) == "- crono" }
                         if alreadyPresent { return }
                         // Insert after enabled:
                         let prefix = enabledLine.prefix(while: { $0 == " " })
-                        lines.insert("\(prefix)\(ind)- coucou", at: enabledIdx + 1)
+                        lines.insert("\(prefix)\(ind)- crono", at: enabledIdx + 1)
                     }
                 } else {
                     // No enabled: key under plugins: — insert after plugins:
                     lines.insert("\(ind)enabled:", at: pluginsIdx + 1)
-                    lines.insert("\(ind)\(ind)- coucou", at: pluginsIdx + 2)
+                    lines.insert("\(ind)\(ind)- crono", at: pluginsIdx + 2)
                 }
             } else {
                 // No plugins: section — append
                 if lines.last != "" { lines.append("") }
                 lines.append("plugins:")
                 lines.append("\(ind)enabled:")
-                lines.append("\(ind)\(ind)- coucou")
+                lines.append("\(ind)\(ind)- crono")
             }
         }
 
-        func removeCoucouPlugin() {
-            // Remove the `- coucou` entry from plugins.enabled only.
+        func removeCronoPlugin() {
+            // Remove the `- crono` entry from plugins.enabled only.
             // If that leaves enabled: with no entries, leave the key in place (don't remove it).
             guard let pluginsIdx = topLevelIndex(key: "plugins") else { return }
             let pluginsRange = sectionRange(from: pluginsIdx)
@@ -2856,24 +2856,24 @@ description: Coucou notch integration — generated by Coucou.app
             let enabledLine = lines[enabledIdx]
             let trimmed = enabledLine.trimmingCharacters(in: .whitespaces)
             if trimmed.contains("[") && trimmed.contains("]") {
-                // Inline list: remove coucou from it
+                // Inline list: remove crono from it
                 let cleaned = trimmed
-                    .replacingOccurrences(of: ", coucou", with: "")
-                    .replacingOccurrences(of: "coucou, ", with: "")
-                    .replacingOccurrences(of: "coucou",   with: "")
+                    .replacingOccurrences(of: ", crono", with: "")
+                    .replacingOccurrences(of: "crono, ", with: "")
+                    .replacingOccurrences(of: "crono",   with: "")
                 let prefix = enabledLine.prefix(while: { $0 == " " })
                 lines[enabledIdx] = "\(prefix)\(cleaned)"
             } else {
-                // Block list: remove the `- coucou` entry
+                // Block list: remove the `- crono` entry
                 let enabledRange = sectionRange(from: enabledIdx)
                 // Collect indices to remove first, then remove in reverse to preserve indices.
                 let toRemove = (enabledRange.lowerBound + 1 ..< enabledRange.upperBound)
-                    .filter { lines[$0].trimmingCharacters(in: .whitespaces) == "- coucou" }
+                    .filter { lines[$0].trimmingCharacters(in: .whitespaces) == "- crono" }
                 for i in toRemove.reversed() { lines.remove(at: i) }
             }
         }
 
-        ensureCoucouPlugin()
+        ensureCronoPlugin()
         if enableApprovals { ensureApprovalTransport() } else { removeApprovalTransport() }
         return lines.joined(separator: "\n")
     }
@@ -2881,7 +2881,7 @@ description: Coucou notch integration — generated by Coucou.app
     func previewHermesPlugin(install: Bool) throws -> String {
         if !install {
             guard FileManager.default.fileExists(atPath: Self.hermesInitPyURL.path) else {
-                throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+                throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                     NSLocalizedDescriptionKey: "No Hermes plugin to remove."
                 ])
             }
@@ -2902,8 +2902,8 @@ description: Coucou notch integration — generated by Coucou.app
         let url = Self.hermesInitPyURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "~/.hermes/plugins/coucou/__init__.py changed since preview. Refresh and try again."
+            throw NSError(domain: "Crono", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "~/.hermes/plugins/crono/__init__.py changed since preview. Refresh and try again."
             ])
         }
         let fm = FileManager.default
@@ -2921,7 +2921,7 @@ description: Coucou notch integration — generated by Coucou.app
             try Self.hermesPluginYaml.write(to: Self.hermesPluginYamlURL, atomically: true, encoding: .utf8)
             // Register the plugin with the Hermes CLI so it appears in plugins.enabled.
             // Best-effort — silently ignored if hermes is not on PATH.
-            try? Self.runHermesCLI(["plugins", "enable", "coucou"])
+            try? Self.runHermesCLI(["plugins", "enable", "crono"])
         }
         _pendingHermesPluginContent = nil
         _pendingHermesPluginFingerprint = nil
@@ -2931,14 +2931,14 @@ description: Coucou notch integration — generated by Coucou.app
         let url = Self.hermesInitPyURL
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        guard content.contains("generated by Coucou") else {
-            throw NSError(domain: "Coucou", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "~/.hermes/plugins/coucou/__init__.py was not generated by Coucou — not deleting it."
+        guard content.contains("generated by Crono") else {
+            throw NSError(domain: "Crono", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "~/.hermes/plugins/crono/__init__.py was not generated by Crono — not deleting it."
             ])
         }
         // Remove from hermes plugins.enabled first, then delete the files.
         // Best-effort — silently ignored if hermes is not on PATH.
-        try? Self.runHermesCLI(["plugins", "disable", "coucou"])
+        try? Self.runHermesCLI(["plugins", "disable", "crono"])
         try FileManager.default.removeItem(at: Self.hermesPluginDir)
     }
 
@@ -2953,7 +2953,7 @@ description: Coucou notch integration — generated by Coucou.app
             (ProcessInfo.processInfo.environment["HOME"] ?? "") + "/.local/bin/hermes",
         ]
         guard let hermesBin = hermesPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
-            throw NSError(domain: "CoucouNoop", code: 0, userInfo: [
+            throw NSError(domain: "CronoNoop", code: 0, userInfo: [
                 NSLocalizedDescriptionKey: "hermes CLI not found."
             ])
         }
@@ -2975,8 +2975,8 @@ description: Coucou notch integration — generated by Coucou.app
         let effectiveApprovals = enableApprovals && supportsTransport
         guard let merged = Self.mergedHermesConfig(base, enableApprovals: effectiveApprovals) else {
             _pendingHermesConfigContent = nil
-            throw NSError(domain: "Coucou", code: 4, userInfo: [
-                NSLocalizedDescriptionKey: "~/.hermes/config.yaml uses an unsupported structure (flow maps, YAML anchors, or multi-document). Edit it manually and add:\n  security:\n    approval:\n      transport: coucou\n      transport_fallback: builtin"
+            throw NSError(domain: "Crono", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: "~/.hermes/config.yaml uses an unsupported structure (flow maps, YAML anchors, or multi-document). Edit it manually and add:\n  security:\n    approval:\n      transport: crono\n      transport_fallback: builtin"
             ])
         }
         _pendingHermesConfigContent = merged
@@ -2989,7 +2989,7 @@ description: Coucou notch integration — generated by Coucou.app
         let url = Self.hermesConfigURL
         let current = (try? Data(contentsOf: url)) ?? Data()
         guard sha256Hex(current) == fp else {
-            throw NSError(domain: "Coucou", code: 1, userInfo: [
+            throw NSError(domain: "Crono", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "~/.hermes/config.yaml changed since preview. Refresh and try again."
             ])
         }
@@ -3030,7 +3030,7 @@ extension Notification.Name {
 
 private let nbHookShellWrapper = """
 #!/bin/sh
-# Coucou hook relay — always exits 0, never blocks Claude Code
+# Crono hook relay — always exits 0, never blocks Claude Code
 HOOK_DIR="$(dirname "$0")"
 out=""
 if xcode-select -p >/dev/null 2>&1; then
@@ -3066,8 +3066,8 @@ exit 0
 
 private let nbHookPythonGitHub = """
 #!/usr/bin/env python3
-# nb-hook.py — Coucou hook relay for Claude Code and third-party agents (GitHub version)
-# Reads JSON from stdin, forwards to Coucou via Unix socket, translates response.
+# nb-hook.py — Crono hook relay for Claude Code and third-party agents (GitHub version)
+# Reads JSON from stdin, forwards to Crono via Unix socket, translates response.
 import sys, json, os, socket
 
 def normalize_event(name):
@@ -3144,10 +3144,10 @@ def main():
         '~/Library/Application Support/NotchBuddy/nb.sock'
     )
 
-    # --statusline mode: relay rate_limits to Coucou, then delegate to saved previous
+    # --statusline mode: relay rate_limits to Crono, then delegate to saved previous
     if '--statusline' in sys.argv[1:]:
         relay = {
-            'coucou_kind': 'statusline',
+            'crono_kind': 'statusline',
             'session_id': payload.get('session_id', ''),
             'rate_limits': payload.get('rate_limits', {}),
         }
@@ -3181,7 +3181,7 @@ def main():
         tool = payload.get('tool_name', '')
         if tool != 'AskUserQuestion':
             return  # Not an AskUserQuestion invocation — exit cleanly (no output)
-        payload['coucou_kind'] = 'ask_user_question'
+        payload['crono_kind'] = 'ask_user_question'
         env = os.environ
         payload.setdefault('term_program', env.get('TERM_PROGRAM', ''))
         payload.setdefault('iterm_session_id', env.get('ITERM_SESSION_ID', ''))
@@ -3227,7 +3227,7 @@ def main():
         return
 
     # Parse --agent <name> and optional positional event from argv.
-    # --agent tags the payload with coucou_agent so the app routes to the right pill.
+    # --agent tags the payload with crono_agent so the app routes to the right pill.
     # The positional arg is a fallback event name for agents that do not set hook_event_name.
     args = sys.argv[1:]
     agent = ''
@@ -3242,11 +3242,11 @@ def main():
                 arg_event = args[i]
             i += 1
     if agent:
-        payload.setdefault('coucou_agent', agent)
+        payload.setdefault('crono_agent', agent)
     # Claude Code sessions from the Claude desktop app (Code tab) report this entrypoint;
     # route them to the Claude Desktop pill instead of dropping them (no VS Code terminal).
-    if not payload.get('coucou_agent') and os.environ.get('CLAUDE_CODE_ENTRYPOINT') == 'claude-desktop':
-        payload['coucou_agent'] = 'claude-desktop'
+    if not payload.get('crono_agent') and os.environ.get('CLAUDE_CODE_ENTRYPOINT') == 'claude-desktop':
+        payload['crono_agent'] = 'claude-desktop'
 
     # Enrich with terminal context
     env = os.environ
@@ -3274,7 +3274,7 @@ def main():
     # socket_path is already defined above
 
     if event == 'PermissionRequest':
-        # Block and wait for Coucou's decision (Claude Code allows up to 120s)
+        # Block and wait for Crono's decision (Claude Code allows up to 120s)
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             s.settimeout(118)
@@ -3320,7 +3320,7 @@ def main():
                     if agent in ('copilot', 'muse'):
                         out = {'permissionDecision': 'deny'}
                     else:
-                        out = {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': {'behavior': 'deny', 'message': 'Denied from Coucou'}}}
+                        out = {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': {'behavior': 'deny', 'message': 'Denied from Crono'}}}
                     sys.stdout.write(json.dumps(out) + '\\n')
                     sys.stdout.flush()
                     sys.exit(0)
@@ -3369,7 +3369,7 @@ sys.exit(0)
 
 private let nbHookPythonAppStore = """
 #!/usr/bin/env python3
-# nb-hook.py — Coucou (App Store) hook relay for Claude Code and third-party agents
+# nb-hook.py — Crono (App Store) hook relay for Claude Code and third-party agents
 # Socket lives inside the sandboxed container; script runs outside the sandbox.
 import sys, json, os, socket
 
@@ -3444,13 +3444,13 @@ def main():
             return
 
     socket_path = os.path.expanduser(
-        '~/Library/Containers/fr.louisraille.Coucou/Data/nb.sock'
+        '~/Library/Containers/com.yashhedaoo.Crono/Data/nb.sock'
     )
 
-    # --statusline mode: relay rate_limits to Coucou, then delegate to saved previous
+    # --statusline mode: relay rate_limits to Crono, then delegate to saved previous
     if '--statusline' in sys.argv[1:]:
         relay = {
-            'coucou_kind': 'statusline',
+            'crono_kind': 'statusline',
             'session_id': payload.get('session_id', ''),
             'rate_limits': payload.get('rate_limits', {}),
         }
@@ -3484,7 +3484,7 @@ def main():
         tool = payload.get('tool_name', '')
         if tool != 'AskUserQuestion':
             return  # Not an AskUserQuestion invocation — exit cleanly (no output)
-        payload['coucou_kind'] = 'ask_user_question'
+        payload['crono_kind'] = 'ask_user_question'
         env = os.environ
         payload.setdefault('term_program', env.get('TERM_PROGRAM', ''))
         payload.setdefault('iterm_session_id', env.get('ITERM_SESSION_ID', ''))
@@ -3530,7 +3530,7 @@ def main():
         return
 
     # Parse --agent <name> and optional positional event from argv.
-    # --agent tags the payload with coucou_agent so the app routes to the right pill.
+    # --agent tags the payload with crono_agent so the app routes to the right pill.
     # The positional arg is a fallback event name for agents that do not set hook_event_name.
     args = sys.argv[1:]
     agent = ''
@@ -3545,11 +3545,11 @@ def main():
                 arg_event = args[i]
             i += 1
     if agent:
-        payload.setdefault('coucou_agent', agent)
+        payload.setdefault('crono_agent', agent)
     # Claude Code sessions from the Claude desktop app (Code tab) report this entrypoint;
     # route them to the Claude Desktop pill instead of dropping them (no VS Code terminal).
-    if not payload.get('coucou_agent') and os.environ.get('CLAUDE_CODE_ENTRYPOINT') == 'claude-desktop':
-        payload['coucou_agent'] = 'claude-desktop'
+    if not payload.get('crono_agent') and os.environ.get('CLAUDE_CODE_ENTRYPOINT') == 'claude-desktop':
+        payload['crono_agent'] = 'claude-desktop'
 
     env = os.environ
     payload.setdefault('term_program', env.get('TERM_PROGRAM', ''))
@@ -3576,7 +3576,7 @@ def main():
     # socket_path is already defined above
 
     if event == 'PermissionRequest':
-        # Block and wait for Coucou's decision (Claude Code allows up to 120s)
+        # Block and wait for Crono's decision (Claude Code allows up to 120s)
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             s.settimeout(118)
@@ -3622,7 +3622,7 @@ def main():
                     if agent in ('copilot', 'muse'):
                         out = {'permissionDecision': 'deny'}
                     else:
-                        out = {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': {'behavior': 'deny', 'message': 'Denied from Coucou'}}}
+                        out = {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': {'behavior': 'deny', 'message': 'Denied from Crono'}}}
                     sys.stdout.write(json.dumps(out) + '\\n')
                     sys.stdout.flush()
                     sys.exit(0)

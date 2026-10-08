@@ -609,7 +609,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "coucou"
+name = "crono"
 version = "0.2.0"
 dependencies = [
  "gtk",
@@ -630,7 +630,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "coucou-hook"
+name = "crono-hook"
 version = "0.2.0"
 dependencies = [
  "libc",

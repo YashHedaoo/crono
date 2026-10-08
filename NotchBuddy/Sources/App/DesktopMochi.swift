@@ -82,6 +82,9 @@ struct DesktopBotView: View {
         .onChange(of: appState.effectiveState) { _, newState in
             engine.setState(newState)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .triggerLaugh)) { _ in
+            engine.laugh()
+        }
         .onAppear {
             engine.setState(appState.effectiveState, force: true)
             engine.setOutfit(appState.resolvedOutfit, animated: false)

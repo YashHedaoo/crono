@@ -235,7 +235,7 @@ final class IslandWindowController: NSWindowController {
                 self.setMode(.hidden)
 
             case .petit:
-                if from == .coucou {
+                if from == .crono {
                     // Fire interrupt first so canvas collapse starts before mode change
                     NotificationCenter.default.post(name: .greetingInterrupt, object: nil)
                 } else if from == .hidden {
@@ -248,7 +248,7 @@ final class IslandWindowController: NSWindowController {
                 // setMode BEFORE changing view: onChange(of: state.view) guards on .expanded,
                 // so setting view while already compact won't trigger a spurious open animation.
                 self.setMode(.compact)
-                if from == .coucou { self.state.view = self.defaultView() }
+                if from == .crono { self.state.view = self.defaultView() }
                 // Start 60s hide timer if mouse is not currently over the island
                 if !self.wasInIsland { self.fsm.mouseLeft() }
 
@@ -259,7 +259,7 @@ final class IslandWindowController: NSWindowController {
                     self.fsm.mouseLeft()
                 }
 
-            case .coucou:
+            case .crono:
                 self.expand(to: .greeting)
             }
         }
@@ -324,8 +324,8 @@ final class IslandWindowController: NSWindowController {
         // Feed FSM hover enter/leave
         if inIsland && !wasInIsland {
             guard !inAttachDrag else { wasInIsland = inIsland; return }
-            // If in coucou: tell greeting to stay open (tc → infinity)
-            if fsm.state == .coucou {
+            // If in crono: tell greeting to stay open (tc → infinity)
+            if fsm.state == .crono {
                 NotificationCenter.default.post(name: .greetingHover, object: nil)
             }
             fsm.mouseEntered()
@@ -335,19 +335,40 @@ final class IslandWindowController: NSWindowController {
         }
         wasInIsland = inIsland
 
-        // Bot-head hover (love emote)
+        // Bot-head hover (love emote) & cursor rubbing (laugh like hell!)
         let overBot = state.mode == .expanded && state.stateOverride == nil && isBotHit(local)
         if overBot && !botHovering { botHoverIn(mousePos: NSEvent.mouseLocation) }
         if !overBot && botHovering { botHoverOut() }
         botHovering = overBot
         if botHovering {
             let m = NSEvent.mouseLocation
+            let now = CACurrentMediaTime()
+
+            // Detect cursor rubbing / scrubbing back and forth across Mochi's face
+            if now - lastRubTime > 0.4 {
+                rubAccumulated = 0
+            }
+            let stepDist = hypot(m.x - lastRubPos.x, m.y - lastRubPos.y)
+            if stepDist > 1.5 && stepDist < 70 {
+                rubAccumulated += stepDist
+                lastRubTime = now
+                if rubAccumulated > 60 && (now - lastLaughTime > 1.6) {
+                    lastLaughTime = now
+                    rubAccumulated = 0
+                    botHoverTimer?.cancel()
+                    NotificationCenter.default.post(name: .triggerLaugh, object: nil)
+                }
+            }
+            lastRubPos = m
+
             let dist = hypot(m.x - botHoverStartPos.x, m.y - botHoverStartPos.y)
             if dist > 40 {
                 botHoverStartPos = m
                 botHoverTimer?.cancel()
                 scheduleLoveTimer()
             }
+        } else {
+            rubAccumulated = 0
         }
 
         // Ghost Mochi follows cursor + window highlight during drag (60 Hz, no throttle)
@@ -358,6 +379,10 @@ final class IslandWindowController: NSWindowController {
     }
 
     private var lastMouse: CGPoint = .zero
+    private var lastRubTime: TimeInterval = 0
+    private var lastRubPos: CGPoint = .zero
+    private var rubAccumulated: CGFloat = 0
+    private var lastLaughTime: TimeInterval = 0
 
     // MARK: - Bot-head hover (love emote — mirrors prototype botHover())
 
@@ -432,7 +457,7 @@ final class IslandWindowController: NSWindowController {
         guard fsm.isHeldOpen?() != true || keepsApprovalPending else { return }
         if !keepsApprovalPending { state.isPinned = false }
         finishedPinTimer?.cancel()
-        // Keep the FSM in step with what is on screen (home/coucou → petit now).
+        // Keep the FSM in step with what is on screen (home/crono → petit now).
         fsm.collapse()
         setMode(.compact)
         window?.resignKey()
@@ -1221,6 +1246,7 @@ struct GhostBotView: View {
 extension Notification.Name {
     static let triggerEmote     = Notification.Name("notchBuddy.triggerEmote")
     static let triggerSlap      = Notification.Name("notchBuddy.triggerSlap")
+    static let triggerLaugh     = Notification.Name("notchBuddy.triggerLaugh")
     static let botDizzy         = Notification.Name("notchBuddy.botDizzy")
     static let botGreet         = Notification.Name("notchBuddy.botGreet")
     static let botBlink         = Notification.Name("notchBuddy.botBlink")

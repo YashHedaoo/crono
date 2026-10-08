@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn a_real_full_name_gives_its_first_word() {
         assert_eq!(first_name_from("Théodore Riant").as_deref(), Some("Théodore"));
-        assert_eq!(first_name_from("  Louis Raille ").as_deref(), Some("Louis"));
+        assert_eq!(first_name_from("  Yash Hedaoo ").as_deref(), Some("Louis"));
         assert_eq!(first_name_from("Jean-Luc Picard").as_deref(), Some("Jean-Luc"));
         assert_eq!(first_name_from("O'Brien Miles").as_deref(), Some("O'Brien"));
         assert_eq!(first_name_from("Louis").as_deref(), Some("Louis"));

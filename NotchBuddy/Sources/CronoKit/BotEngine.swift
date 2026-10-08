@@ -400,6 +400,79 @@ final class BotEngine: ObservableObject {
         }
     }
 
+    /// Hysterical laughing reaction when tickled / rubbed on the face!
+    func laugh() {
+        interruptGreet()
+        let now = CACurrentMediaTime()
+        eyeOverride = .happy
+        eyeOverrideUntil = now + 2.2
+
+        // Violent happy giggle bounce & squash-stretch!
+        anim("sy", keys: [
+            TweenKey(target: 0.76, duration: 50, ease: Ease.out),
+            TweenKey(target: 1.24, duration: 55, ease: Ease.out),
+            TweenKey(target: 0.80, duration: 50, ease: Ease.inOut),
+            TweenKey(target: 1.20, duration: 55, ease: Ease.out),
+            TweenKey(target: 0.84, duration: 50, ease: Ease.inOut),
+            TweenKey(target: 1.16, duration: 55, ease: Ease.out),
+            TweenKey(target: 0.88, duration: 50, ease: Ease.inOut),
+            TweenKey(target: 1.12, duration: 55, ease: Ease.out),
+            TweenKey(target: 0.92, duration: 50, ease: Ease.inOut),
+            TweenKey(target: 1.08, duration: 55, ease: Ease.out),
+            TweenKey(target: 1.0,  duration: 120, ease: Ease.back)
+        ])
+        anim("sx", keys: [
+            TweenKey(target: 1.24, duration: 50, ease: Ease.out),
+            TweenKey(target: 0.76, duration: 55, ease: Ease.out),
+            TweenKey(target: 1.20, duration: 50, ease: Ease.inOut),
+            TweenKey(target: 0.80, duration: 55, ease: Ease.out),
+            TweenKey(target: 1.16, duration: 50, ease: Ease.inOut),
+            TweenKey(target: 0.84, duration: 55, ease: Ease.out),
+            TweenKey(target: 1.12, duration: 50, ease: Ease.inOut),
+            TweenKey(target: 0.88, duration: 55, ease: Ease.out),
+            TweenKey(target: 1.0,  duration: 120, ease: Ease.back)
+        ])
+        // Giggle side-to-side wobble
+        anim("tilt", keys: [
+            TweenKey(target: 0.22, duration: 45, ease: Ease.out),
+            TweenKey(target: -0.22, duration: 45, ease: Ease.out),
+            TweenKey(target: 0.18, duration: 45, ease: Ease.out),
+            TweenKey(target: -0.18, duration: 45, ease: Ease.out),
+            TweenKey(target: 0.14, duration: 45, ease: Ease.out),
+            TweenKey(target: -0.14, duration: 45, ease: Ease.out),
+            TweenKey(target: 0.08, duration: 45, ease: Ease.out),
+            TweenKey(target: -0.08, duration: 45, ease: Ease.out),
+            TweenKey(target: 0.0,  duration: 80, ease: Ease.inOut)
+        ])
+        // Jumping up with joy
+        anim("oy", keys: [
+            TweenKey(target: -0.24, duration: 65, ease: Ease.out),
+            TweenKey(target: 0.06,  duration: 65, ease: Ease.inOut),
+            TweenKey(target: -0.20, duration: 65, ease: Ease.out),
+            TweenKey(target: 0.04,  duration: 65, ease: Ease.inOut),
+            TweenKey(target: -0.15, duration: 65, ease: Ease.out),
+            TweenKey(target: 0.0,   duration: 90, ease: Ease.back)
+        ])
+        // Red blushing cheeks
+        anim("blush", keys: [
+            TweenKey(target: 1.0, duration: 150, ease: Ease.out),
+            TweenKey(target: 0.9, duration: 1000, ease: Ease.lin),
+            TweenKey(target: 0.0, duration: 400, ease: Ease.inOut)
+        ])
+
+        // Spray particles of laughter!
+        emit(.star, count: 6)
+        emit(.heart, count: 4)
+
+        SoundEngine.shared.play("love")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            SoundEngine.shared.play("pop")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+            SoundEngine.shared.play("pop")
+        }
+    }
+
     // MARK: - Dancing
 
     func setDancing(_ dancing: Bool) {

@@ -4,7 +4,7 @@
 //! The one rule that matters: **nothing that allows anything is ever printed
 //! without a decision a human clicked.** With no decision the reply is silence,
 //! an empty `{}`, or Copilot's explicit "ask", and every agent then asks in its
-//! own terminal exactly as if Coucou were not installed.
+//! own terminal exactly as if Crono were not installed.
 
 use serde_json::{json, Map, Value};
 
@@ -83,7 +83,7 @@ pub fn decision_json(decision: &str, question: Option<&Value>) -> Option<String>
         // "always" still answers a plain allow; remembering it is the island's
         // business, not the agent's.
         "allow" | "always" => r#"{"behavior":"allow"}"#.to_string(),
-        "deny" => r#"{"behavior":"deny","message":"Denied from Coucou"}"#.to_string(),
+        "deny" => r#"{"behavior":"deny","message":"Denied from Crono"}"#.to_string(),
         _ => return None,
     };
     Some(format!(
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn each_agent_gets_its_own_reply_shape() {
         let allow = r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#;
-        let deny = r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Denied from Coucou"}}}"#;
+        let deny = r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Denied from Crono"}}}"#;
         for agent in ["", "codex"] {
             assert_eq!(stdout(agent, "PermissionRequest", Some("allow"), None).unwrap(), allow);
             assert_eq!(stdout(agent, "PermissionRequest", Some("always"), None).unwrap(), allow);
@@ -194,7 +194,7 @@ mod tests {
         assert_eq!(stdout("copilot", "PermissionRequest", None, None).unwrap(), r#"{"permissionDecision":"ask"}"#);
         assert_eq!(stdout("muse", "PermissionRequest", None, None), None);
         // Gemini CLI and Antigravity read "{}" as "no opinion" — Antigravity's
-        // PreToolUse included: the tool is never allowed on Coucou's say-so.
+        // PreToolUse included: the tool is never allowed on Crono's say-so.
         for agent in ["gemini", "antigravity"] {
             for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"] {
                 assert_eq!(stdout(agent, event, None, None).unwrap(), "{}");

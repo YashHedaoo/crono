@@ -122,6 +122,9 @@ struct BotCanvasView: View {
         .onReceive(NotificationCenter.default.publisher(for: .triggerSlap)) { _ in
             engine.slap()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .triggerLaugh)) { _ in
+            engine.laugh()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .botBlink)) { _ in
             engine.blink()
         }

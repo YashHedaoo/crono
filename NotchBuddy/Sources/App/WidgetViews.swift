@@ -862,50 +862,50 @@ struct CalendarCardView: View {
         let today = cal.component(.day, from: Date())
         let isCurrentMonth = monthOffset == 0
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             WidgetCardHeader(task: task)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Button { withAnimation { monthOffset -= 1 } } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundColor(Color(hex: "#8E939C"))
                 }
                 .buttonStyle(.plain)
                 Text(WidgetFormat.monthTitle(monthDate))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color(hex: "#F5F6F8"))
                 Button { withAnimation { monthOffset += 1 } } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundColor(Color(hex: "#8E939C"))
                 }
                 .buttonStyle(.plain)
                 Spacer()
                 if monthOffset != 0 {
                     Button("Today") { withAnimation { monthOffset = 0 } }
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundColor(Color(hex: task.color).opacity(0.85))
                         .buttonStyle(.plain)
                 }
             }
-            .padding(.top, 2)
+            .padding(.top, 1)
 
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 ForEach(weekdayLetters, id: \.self) { letter in
                     Text(letter)
-                        .font(.system(size: 9))
+                        .font(.system(size: 8))
                         .foregroundColor(Color(hex: "#6B7079"))
                         .frame(maxWidth: .infinity)
                 }
             }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 3) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 1) {
                 ForEach(0..<(leading + daysInMonth), id: \.self) { idx in
                     let day = idx - leading + 1
                     if day < 1 {
                         Color.clear
-                            .frame(height: 22)
+                            .frame(height: 17)
                     } else {
                         let isToday = isCurrentMonth && day == today
                         let dayDate: Date = {
@@ -918,24 +918,24 @@ struct CalendarCardView: View {
                         Button {
                             selectedDateForEvent = dayDate
                         } label: {
-                            VStack(spacing: 1) {
+                            VStack(spacing: 0.5) {
                                 Text("\(day)")
-                                    .font(.system(size: 10, weight: isToday ? .bold : .regular).monospacedDigit())
+                                    .font(.system(size: 9.5, weight: isToday ? .bold : .regular).monospacedDigit())
                                     .foregroundColor(isToday
                                                      ? Color.black
                                                      : (idx % 7 == 0 || idx % 7 == 6
                                                         ? Color(hex: "#8E939C")
                                                         : Color(hex: "#F5F6F8")))
-                                    .frame(width: 18, height: 16)
+                                    .frame(width: 17, height: 14)
                                     .background(isToday ? Color(hex: task.color) : Color.clear)
                                     .clipShape(Circle())
 
                                 // Dot indicator for dates with events
                                 Circle()
                                     .fill(hasEvents ? Color(hex: task.color) : Color.clear)
-                                    .frame(width: 3, height: 3)
+                                    .frame(width: 2.5, height: 2.5)
                             }
-                            .frame(height: 22)
+                            .frame(height: 17)
                         }
                         .buttonStyle(.plain)
                         .popover(isPresented: Binding(
@@ -954,11 +954,11 @@ struct CalendarCardView: View {
                     }
                 }
             }
-            .padding(.top, 2)
+            .padding(.top, 1)
         }
-        .padding(.leading, 108)
-        .padding(.trailing, 16)
-        .padding(.vertical, 4)
+        .padding(.leading, 106)
+        .padding(.trailing, 14)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

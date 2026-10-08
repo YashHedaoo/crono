@@ -16,7 +16,7 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T |
   try {
     return await invoke<T>(cmd, args);
   } catch (err) {
-    console.error(`[coucou] ${cmd} failed`, err);
+    console.error(`[crono] ${cmd} failed`, err);
     return null;
   }
 }
@@ -78,12 +78,12 @@ export const Bridge = {
 
   openSettingsWindow: () => call<void>("open_settings_window"),
 
-  /** Writes to %LOCALAPPDATA%\Coucou\coucou.log, next to the Rust lines. */
+  /** Writes to %LOCALAPPDATA%\Crono\crono.log, next to the Rust lines. */
   log: (message: string) => call<void>("log_line", { message }),
 
   // ── Claude Code hooks ─────────────────────────────────────────────────────
   hooksStatus: () => call<HookStatus>("hooks_status"),
-  /** Pill ID → whether that agent's hooks reach Coucou (read-only, Mac #183). */
+  /** Pill ID → whether that agent's hooks reach Crono (read-only, Mac #183). */
   agentHooksStatus: () => call<Record<string, boolean>>("agent_hooks_status"),
   /** Diff to show before anything is written. `install: false` previews removal. */
   hooksPreview: (install: boolean) => callOrThrow<HookPreview>("hooks_preview", { install }),
@@ -229,7 +229,7 @@ export async function emitToWindow(label: string, event: string, payload?: unkno
   try {
     await emitTo(label, event, payload);
   } catch (err) {
-    console.error(`[coucou] emit ${event} failed`, err);
+    console.error(`[crono] emit ${event} failed`, err);
   }
 }
 
@@ -265,7 +265,7 @@ export interface DroppedFile {
 
 export interface HookStatus {
   installed: boolean;
-  /** Coucou's status line relay (plan usage) is the status line in settings.json. */
+  /** Crono's status line relay (plan usage) is the status line in settings.json. */
   planRelayInstalled: boolean;
   settingsPath: string;
   hookPath: string;
@@ -278,7 +278,7 @@ export interface AgentHookStatus {
   id: string;
   name: string;
   installed: boolean;
-  /** The file (or files, one per line) Coucou writes. */
+  /** The file (or files, one per line) Crono writes. */
   path: string;
   hookReady: boolean;
   /** The island can allow or deny this agent's permission requests. */
@@ -305,7 +305,7 @@ export interface HookPreview {
 
 /** Same as `call`, but surfaces the error so the UI can show what went wrong. */
 async function callOrThrow<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!IS_TAURI) throw new Error("not running inside Coucou");
+  if (!IS_TAURI) throw new Error("not running inside Crono");
   return invoke<T>(cmd, args);
 }
 
@@ -369,7 +369,7 @@ export async function onDragDrop(handler: (e: DragDropPayload) => void) {
       handler({ type: "drop", paths: [] });
       return;
     }
-    webview.postMessageWithAdditionalObjects("coucou-file-drop", files);
+    webview.postMessageWithAdditionalObjects("crono-file-drop", files);
   };
 
   window.addEventListener("dragenter", onEnter);

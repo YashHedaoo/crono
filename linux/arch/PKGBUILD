@@ -1,15 +1,15 @@
 # Maintainer: FabioLukas123
-# Coucou for Arch Linux — built from the Tauri app in windows/, which runs on
+# Crono for Arch Linux — built from the Tauri app in windows/, which runs on
 # Windows and Linux alike.
 
-pkgname=coucou-git
-_pkgname=coucou
+pkgname=crono-git
+_pkgname=crono
 pkgver=0.2.0
 pkgrel=1
 pkgdesc="Mochi lives at the top of your screen and keeps an eye on your Claude Code sessions"
 arch=('x86_64' 'aarch64')
-url="https://github.com/Louis-CFM/coucou"
-license=("MIT" "LicenseRef-coucou-assets")
+url="https://github.com/YashHedaoo/crono"
+license=("MIT" "LicenseRef-crono-assets")
 depends=(
   'webkit2gtk-4.1'
   'gtk3'
@@ -30,7 +30,7 @@ provides=("$_pkgname")
 conflicts=("$_pkgname")
 # makepkg's default LTO and debug flags make the Rust build very slow.
 options=('!lto' '!debug')
-source=("$_pkgname::git+https://github.com/Louis-CFM/coucou.git")
+source=("$_pkgname::git+https://github.com/YashHedaoo/crono.git")
 sha256sums=('SKIP')
 
 pkgver() {
@@ -51,19 +51,19 @@ build() {
   cd "$_pkgname/windows"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR="$PWD/target"
-  # beforeBuildCommand builds the front end and the coucou-hook relay.
+  # beforeBuildCommand builds the front end and the crono-hook relay.
   npx tauri build --no-bundle
 }
 
 package() {
   cd "$_pkgname"
-  install -Dm755 windows/target/release/coucou "$pkgdir/usr/bin/coucou"
-  # Found next to the app, then copied into ~/.local/share/coucou/bin at launch.
-  install -Dm755 windows/target/release/coucou-hook "$pkgdir/usr/bin/coucou-hook"
-  install -Dm644 linux/arch/coucou.desktop "$pkgdir/usr/share/applications/coucou.desktop"
-  install -Dm644 windows/src-tauri/icons/32x32.png "$pkgdir/usr/share/icons/hicolor/32x32/apps/coucou.png"
-  install -Dm644 windows/src-tauri/icons/128x128.png "$pkgdir/usr/share/icons/hicolor/128x128/apps/coucou.png"
-  install -Dm644 windows/src-tauri/icons/128x128@2x.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/coucou.png"
+  install -Dm755 windows/target/release/crono "$pkgdir/usr/bin/crono"
+  # Found next to the app, then copied into ~/.local/share/crono/bin at launch.
+  install -Dm755 windows/target/release/crono-hook "$pkgdir/usr/bin/crono-hook"
+  install -Dm644 linux/arch/crono.desktop "$pkgdir/usr/share/applications/crono.desktop"
+  install -Dm644 windows/src-tauri/icons/32x32.png "$pkgdir/usr/share/icons/hicolor/32x32/apps/crono.png"
+  install -Dm644 windows/src-tauri/icons/128x128.png "$pkgdir/usr/share/icons/hicolor/128x128/apps/crono.png"
+  install -Dm644 windows/src-tauri/icons/128x128@2x.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/crono.png"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 LICENSE-ASSETS.md "$pkgdir/usr/share/licenses/$pkgname/LICENSE-ASSETS.md"
 }
