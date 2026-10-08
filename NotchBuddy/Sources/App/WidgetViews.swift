@@ -1,5 +1,7 @@
 import SwiftUI
 import Combine
+import EventKit
+
 
 // MARK: - Shared formatting
 
@@ -603,9 +605,240 @@ struct StopwatchCardView: View {
 
 // MARK: - Calendar card
 
+// MARK: - Calendar Event Model & Persistence
+
+public struct CalendarEventItem: Identifiable, Codable, Sendable {
+    public var id = UUID()
+    public var title: String
+    public var date: Date
+    public var timeString: String
+
+    public init(id: UUID = UUID(), title: String, date: Date, timeString: String = "") {
+        self.id = id
+        self.title = title
+        self.date = date
+        self.timeString = timeString
+    }
+}
+
+@MainActor
+public class CalendarEventManager: ObservableObject {
+    public static let shared = CalendarEventManager()
+
+    @Published public var events: [CalendarEventItem] = [] {
+        didSet { save() }
+    }
+
+    private let storageKey = "Chrono_CalendarEvents_v1"
+    private let eventStore = EKEventStore()
+
+    public init() {
+        load()
+    }
+
+    public func events(for date: Date) -> [CalendarEventItem] {
+        let cal = Calendar.current
+        return events.filter { cal.isDate($0.date, inSameDayAs: date) }
+    }
+
+    public func hasEvents(for date: Date) -> Bool {
+        let cal = Calendar.current
+        return events.contains { cal.isDate($0.date, inSameDayAs: date) }
+    }
+
+    public func addEvent(title: String, date: Date, time: String = "") {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        events.append(CalendarEventItem(title: trimmed, date: date, timeString: time))
+        syncToSystemCalendar(title: trimmed, date: date, timeString: time)
+    }
+
+    public func removeEvent(id: UUID) {
+        events.removeAll { $0.id == id }
+    }
+
+    // MARK: - Sync to macOS System Calendar
+    public func syncToSystemCalendar(title: String, date: Date, timeString: String = "") {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let granted: Bool
+                if #available(macOS 14.0, *) {
+                    granted = try await self.eventStore.requestFullAccessToEvents()
+                } else {
+                    granted = try await self.eventStore.requestAccess(to: .event)
+                }
+
+                guard granted else { return }
+
+                let ekEvent = EKEvent(eventStore: self.eventStore)
+                ekEvent.title = title
+
+                let cal = Calendar.current
+                var comps = cal.dateComponents([.year, .month, .day], from: date)
+
+                if let (hour, minute) = self.parseTimeString(timeString) {
+                    comps.hour = hour
+                    comps.minute = minute
+                    comps.second = 0
+                    let start = cal.date(from: comps) ?? date
+                    ekEvent.startDate = start
+                    ekEvent.endDate = start.addingTimeInterval(3600)
+                    ekEvent.isAllDay = false
+                } else {
+                    comps.hour = 9
+                    comps.minute = 0
+                    comps.second = 0
+                    let start = cal.date(from: comps) ?? date
+                    ekEvent.startDate = start
+                    ekEvent.endDate = start.addingTimeInterval(3600)
+                    ekEvent.isAllDay = timeString.trimmingCharacters(in: .whitespaces).isEmpty
+                }
+
+                ekEvent.calendar = self.eventStore.defaultCalendarForNewEvents
+                try self.eventStore.save(ekEvent, span: .thisEvent, commit: true)
+            } catch {
+                print("Failed to save to macOS Calendar: \(error)")
+            }
+        }
+    }
+
+    private func parseTimeString(_ str: String) -> (Int, Int)? {
+        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return nil }
+
+        let formats = ["h:mm a", "hh:mm a", "h a", "ha", "HH:mm", "H:mm", "h:mma", "hh:mma"]
+        for fmt in formats {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "en_US_POSIX")
+            df.dateFormat = fmt
+            if let d = df.date(from: trimmed) {
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: d)
+                if let h = comps.hour, let m = comps.minute {
+                    return (h, m)
+                }
+            }
+        }
+        return nil
+    }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(events) {
+            UserDefaults.standard.set(data, forKey: storageKey)
+        }
+    }
+
+    private func load() {
+        if let data = UserDefaults.standard.data(forKey: storageKey),
+           let decoded = try? JSONDecoder().decode([CalendarEventItem].self, from: data) {
+            self.events = decoded
+        }
+    }
+}
+
+// MARK: - Calendar Event Popover
+
+struct CalendarEventPopoverView: View {
+    let date: Date
+    let taskColor: String
+    @ObservedObject var eventManager = CalendarEventManager.shared
+    @Binding var isPresented: Bool
+
+    @State private var newTitle: String = ""
+    @State private var newTime: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(date.formatted(.dateTime.weekday(.wide).month().day()))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(Color(hex: "#F5F6F8"))
+                Spacer()
+                Button {
+                    if let url = URL(string: "calshow:\(date.timeIntervalSinceReferenceDate)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "#8E939C"))
+                }
+                .buttonStyle(.plain)
+                .help("Open in Apple Calendar")
+            }
+
+            Divider()
+
+            let dayEvents = eventManager.events(for: date)
+            if !dayEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(dayEvents) { item in
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color(hex: taskColor))
+                                .frame(width: 6, height: 6)
+                            Text(item.title)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(hex: "#F5F6F8"))
+                                .lineLimit(1)
+                            if !item.timeString.isEmpty {
+                                Text(item.timeString)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Color(hex: "#8E939C"))
+                            }
+                            Spacer()
+                            Button {
+                                eventManager.removeEvent(id: item.id)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color(hex: "#8E939C"))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 100)
+            } else {
+                Text("No events for this day")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(hex: "#8E939C"))
+            }
+
+            Divider()
+
+            VStack(spacing: 6) {
+                TextField("Add event title...", text: $newTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+
+                HStack {
+                    TextField("Time (e.g. 2:00 PM)", text: $newTime)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+
+                    Button("Add") {
+                        eventManager.addEvent(title: newTitle, date: date, time: newTime)
+                        newTitle = ""
+                        newTime = ""
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 250)
+        .background(Color(hex: "#1A1D24"))
+    }
+}
+
 struct CalendarCardView: View {
     let task: AgentTask
     @State private var monthOffset = 0
+    @ObservedObject private var eventManager = CalendarEventManager.shared
+    @State private var selectedDateForEvent: Date? = nil
 
     private var displayedMonth: Date {
         Calendar.current.date(byAdding: .month, value: monthOffset, to: Date()) ?? Date()
@@ -672,19 +905,52 @@ struct CalendarCardView: View {
                     let day = idx - leading + 1
                     if day < 1 {
                         Color.clear
-                            .frame(height: 18)
+                            .frame(height: 22)
                     } else {
                         let isToday = isCurrentMonth && day == today
-                        Text("\(day)")
-                            .font(.system(size: 10, weight: isToday ? .bold : .regular).monospacedDigit())
-                            .foregroundColor(isToday
-                                             ? Color.black
-                                             : (idx % 7 == 0 || idx % 7 == 6
-                                                ? Color(hex: "#8E939C")
-                                                : Color(hex: "#F5F6F8")))
-                            .frame(width: 18, height: 18)
-                            .background(isToday ? Color(hex: task.color) : Color.clear)
-                            .clipShape(Circle())
+                        let dayDate: Date = {
+                            var dc = comps
+                            dc.day = day
+                            return cal.date(from: dc) ?? monthDate
+                        }()
+                        let hasEvents = eventManager.hasEvents(for: dayDate)
+
+                        Button {
+                            selectedDateForEvent = dayDate
+                        } label: {
+                            VStack(spacing: 1) {
+                                Text("\(day)")
+                                    .font(.system(size: 10, weight: isToday ? .bold : .regular).monospacedDigit())
+                                    .foregroundColor(isToday
+                                                     ? Color.black
+                                                     : (idx % 7 == 0 || idx % 7 == 6
+                                                        ? Color(hex: "#8E939C")
+                                                        : Color(hex: "#F5F6F8")))
+                                    .frame(width: 18, height: 16)
+                                    .background(isToday ? Color(hex: task.color) : Color.clear)
+                                    .clipShape(Circle())
+
+                                // Dot indicator for dates with events
+                                Circle()
+                                    .fill(hasEvents ? Color(hex: task.color) : Color.clear)
+                                    .frame(width: 3, height: 3)
+                            }
+                            .frame(height: 22)
+                        }
+                        .buttonStyle(.plain)
+                        .popover(isPresented: Binding(
+                            get: { selectedDateForEvent != nil && cal.isDate(selectedDateForEvent!, inSameDayAs: dayDate) },
+                            set: { if !$0 { selectedDateForEvent = nil } }
+                        ), arrowEdge: .bottom) {
+                            CalendarEventPopoverView(
+                                date: dayDate,
+                                taskColor: task.color,
+                                isPresented: Binding(
+                                    get: { selectedDateForEvent != nil },
+                                    set: { if !$0 { selectedDateForEvent = nil } }
+                                )
+                            )
+                        }
                     }
                 }
             }

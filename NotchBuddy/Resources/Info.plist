@@ -44,6 +44,10 @@
 	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Pour sauter au terminal, envoyer des mails et piloter Musique.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Allow Chrono to save and sync events with your Calendar.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Allow Chrono to save and sync events with your Calendar.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>

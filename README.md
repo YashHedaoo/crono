@@ -148,7 +148,7 @@ Everything else, troubleshooting included, is in [docs/IPHONE.md](docs/IPHONE.md
 
 ### Windows
 
-Download **[Coucou-Windows.msi](https://github.com/Louis-CFM/coucou/releases/download/windows-latest/Coucou-Windows.msi)** or **[Coucou-Windows-setup.exe](https://github.com/Louis-CFM/coucou/releases/download/windows-latest/Coucou-Windows-setup.exe)** (Windows 10/11, always the newest version) and run it. You can also [build it from source](#build-from-source).
+Download **[Coucou-Windows.msi](https://github.com/Louis-CFM/coucou/releases/download/windows-latest/Coucou-Windows.msi)** or **[Coucou-Windows-setup.exe](https://github.com/Louis-CFM/coucou/releases/download/windows-latest/Coucou-Windows-setup.exe)** (Windows 10/11, always the newest version) and run it. You can also [run it from source](#requirements--running-from-source).
 
 **Windows will show a warning the first time — that's expected.** The installer isn't code-signed yet, so SmartScreen doesn't know the publisher:
 
@@ -178,40 +178,96 @@ The island sits on the top edge on compositors with layer-shell — COSMIC, KDE
 Plasma, Hyprland, Sway and other wlroots compositors. GNOME has no layer-shell,
 so there it runs through XWayland as a dock window at the top of the screen. See [`windows/README.md`](windows/README.md#linux).
 
-### Build from source
+### Requirements & running from source
 
-**macOS** — requirements: macOS 15+, Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+#### macOS
+
+**Requirements**
+
+| Tool | Version | Install |
+|---|---|---|
+| macOS | 15+ | — |
+| Xcode | 16+ (Swift 6) | App Store / [Xcode releases](https://developer.apple.com/download/) |
+| XcodeGen | latest | `brew install xcodegen` |
+| Git | latest | `brew install git` |
+
+**Run**
 
 ```bash
 brew install xcodegen
-git clone https://github.com/Louis-CFM/coucou.git
-cd coucou/NotchBuddy
-xcodegen
-open NotchBuddy.xcodeproj   # then ⌘R
+git clone https://github.com/YashHedaoo/crono.git
+cd crono/NotchBuddy
+xcodegen                 # generates NotchBuddy.xcodeproj from project.yml
+open NotchBuddy.xcodeproj   # then press ⌘R to build & run
 ```
 
-**Windows** — requirements: [Rust](https://rustup.rs), Node 20+, MSVC build tools.
+Or from the command line:
+
+```bash
+xcodebuild -project NotchBuddy.xcodeproj -scheme NotchBuddy -configuration Debug build
+```
+
+The app launches as a floating island in your screen's notch (or a bar at the top
+of the screen on displays without one).
+
+**Windows**
+
+**Requirements**
+
+| Tool | Version | Install |
+|---|---|---|
+| Windows | 10 / 11 | — |
+| Rust toolchain | latest stable | https://rustup.rs |
+| Node.js | 20+ | https://nodejs.org |
+| MSVC Build Tools | latest ("Desktop development with C++") | https://visualstudio.microsoft.com/downloads/ |
+| Git | latest | https://git-scm.com |
+
+WebView2 ships with Windows 10/11 — nothing to install.
+
+**Run**
 
 ```powershell
-git clone https://github.com/Louis-CFM/coucou.git
-cd coucou/windows
+git clone https://github.com/YashHedaoo/crono.git
+cd crono/windows
 npm install
-npm run pack                # installer lands in windows/release/
+npm run tauri dev        # live-reloading development build
+npm run pack             # installer lands in windows/release/
 ```
 
-**Linux** — requirements: [Rust](https://rustup.rs), Node 20+, and the WebKitGTK,
-gtk-layer-shell and appindicator development packages (Debian/Ubuntu names below).
+`npm run dev` alone serves the front end in an ordinary browser — enough to work
+on the island's looks. The finished app runs from `target/release/coucou.exe` and
+sits in the system tray.
+
+**Linux**
+
+**Requirements**
+
+| Tool | Version | Install |
+|---|---|---|
+| Linux (x86_64) | any modern distro | — |
+| Rust toolchain | latest stable | https://rustup.rs |
+| Node.js | 20+ | https://nodejs.org |
+| WebKitGTK, gtk-layer-shell, appindicator dev packages | distro | see below |
+| Git | latest | `sudo apt install git` |
+
+**Run** (Debian / Ubuntu)
 
 ```bash
 sudo apt install build-essential pkg-config \
   libwebkit2gtk-4.1-dev libgtk-layer-shell-dev libayatana-appindicator3-dev \
   librsvg2-dev libssl-dev libdbus-1-dev patchelf \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good
-git clone https://github.com/Louis-CFM/coucou.git
-cd coucou/windows
+git clone https://github.com/YashHedaoo/crono.git
+cd crono/windows
 npm install
-npm run pack                # AppImage, .deb and .rpm land in windows/release/
+npm run tauri dev         # development build
+npm run pack              # AppImage, .deb and .rpm land in windows/release/
 ```
+
+The island sits on the top edge on compositors with layer-shell — COSMIC, KDE
+Plasma, Hyprland, Sway and other wlroots compositors. GNOME has no layer-shell,
+so there it runs through XWayland as a dock window at the top of the screen. See
+[`windows/README.md`](windows/README.md#linux).
 
 ## Setup
 

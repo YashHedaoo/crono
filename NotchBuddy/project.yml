@@ -134,6 +134,8 @@ targets:
         NSHighResolutionCapable: YES
         NSSupportsAutomaticGraphicsSwitching: YES
         NSAppleEventsUsageDescription: "Pour sauter au terminal, envoyer des mails et piloter Musique."
+        NSCalendarsFullAccessUsageDescription: "Allow Chrono to save and sync events with your Calendar."
+        NSCalendarsUsageDescription: "Allow Chrono to save and sync events with your Calendar."
         NSAccessibilityUsageDescription: "Pour lire le titre de la fenêtre active et l'attacher comme contexte."
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
