@@ -38,7 +38,7 @@ enum DesktopMochiLogic {
     static let sleepTimeout:       TimeInterval = 120
     static let sleepMouseDistance: CGFloat      = 150
     static let clampMargin:        CGFloat      = 24
-    static let bodyRadiusFraction: CGFloat      = 0.24
+    static let bodyRadiusFraction: CGFloat      = 0.42
 
     /// Whether Mochi should enter sleeping state.
     static func shouldSleep(lastAgentActiveInterval: TimeInterval,

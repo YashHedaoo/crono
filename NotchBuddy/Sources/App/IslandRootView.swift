@@ -487,6 +487,8 @@ struct IslandContentView: View {
 
 struct IslandHeader: View {
     @ObservedObject var state: AppState
+    @ObservedObject private var nowPlaying = NowPlayingManager.shared
+    @ObservedObject private var health = MacHealthManager.shared
 
     // Claude + Codex pills together: tighten the right side so it clears the notch
     private var bothPlans: Bool {
@@ -512,6 +514,69 @@ struct IslandHeader: View {
                 TabButton(icon: "plus", view: .upload, state: state)
             }
             .padding(.leading, 14)
+
+            Spacer()
+
+            // Center: live HUD indicators (Now Playing EQ, Upcoming Meeting, Low Battery)
+            HStack(spacing: 8) {
+                if nowPlaying.isPlaying {
+                    Button {
+                        if !state.tasks.contains(where: { $0.id == "widget_nowplaying" }) {
+                            state.addTask(AgentTask(id: "widget_nowplaying", name: "Now Playing", color: nowPlaying.playerColor, state: .idle, steps: [], source: .n8n))
+                        }
+                        state.setFocus("widget_nowplaying")
+                    } label: {
+                        HStack(spacing: 4) {
+                            AudioEqualizerBars(isPlaying: true, tintColor: Color(hex: nowPlaying.playerColor))
+                                .scaleEffect(0.65)
+                                .frame(width: 14, height: 14)
+                            Text(nowPlaying.title.isEmpty ? (nowPlaying.player.isEmpty ? "Now Playing" : nowPlaying.player) : nowPlaying.title)
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundColor(Color(hex: nowPlaying.playerColor))
+                                .lineLimit(1)
+                                .frame(maxWidth: 80)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(hex: nowPlaying.playerColor).opacity(0.12))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let meeting = health.upcomingMeeting {
+                    Button {
+                        health.joinMeeting()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "video.fill")
+                                .font(.system(size: 8.5))
+                            Text(meeting.countdownLabel)
+                                .font(.system(size: 9.5, weight: .bold))
+                        }
+                        .foregroundColor(Color(hex: "#E879F9"))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(hex: "#E879F9").opacity(0.15))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if health.isLowBattery {
+                    HStack(spacing: 3) {
+                        Image(systemName: "battery.25")
+                            .font(.system(size: 9))
+                        Text("\(health.batteryPercentage)%")
+                            .font(.system(size: 9.5, weight: .bold))
+                    }
+                    .foregroundColor(Color(hex: "#EF4444"))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color(hex: "#EF4444").opacity(0.15))
+                    .cornerRadius(10)
+                }
+            }
 
             Spacer()
 

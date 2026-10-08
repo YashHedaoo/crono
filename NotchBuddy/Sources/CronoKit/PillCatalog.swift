@@ -63,8 +63,21 @@ enum PillCatalog {
               category: .widget, subtitle: "Widget", source: .n8n),
     ]
 
-    /// Widget pill IDs: stable contract values, always present in the island.
+    /// Icon-only quick widgets docked in bottom-right corner
+    static let cornerWidgets: [PillDefinition] = [
+        .init(id: "widget_nowplaying", name: "Now Playing",   color: "#10B981",
+              category: .widget, subtitle: "Widget", source: .n8n),
+        .init(id: "widget_battery",    name: "Mac Health",    color: "#06B6D4",
+              category: .widget, subtitle: "Widget", source: .n8n),
+    ]
+
+    static let cornerWidgetIds: Set<String> = Set(cornerWidgets.map { $0.id })
+
+    /// Grid widget pill IDs: stable contract values, always present in the island grid.
     static let widgetIds: Set<String> = Set(widgetPills.map { $0.id })
+
+    /// All widget IDs including corner widgets (for card rendering and widget behavior)
+    static let allWidgetIds: Set<String> = widgetIds.union(cornerWidgetIds)
 
     // All declared pills in display order.
     static let all: [PillDefinition] = [
@@ -123,7 +136,7 @@ enum PillCatalog {
         .init(id: "integration_music",   name: "Apple Music", color: "#FA2D48",
               category: .service,   subtitle: "Integration",  source: .n8n, githubOnly: true),
         // ── Widgets ───────────────────────────────────────────────────────────
-    ] + widgetPills
+    ] + widgetPills + cornerWidgets
 
     /// Pills available in the current build target.
     static var available: [PillDefinition] {

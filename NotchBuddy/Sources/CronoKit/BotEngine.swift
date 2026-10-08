@@ -1163,7 +1163,10 @@ final class BotEngine: ObservableObject {
         let cy = H / 2 + particleOverhang / 2 + oy * R + R * 0.06
         // Rigid roll: accessories see roll=0 (they rotate with the body via context transform)
         let outfitRoll: CGFloat = outfitPresence > 0.05 ? 0 : roll
-        let mH = MochiH(R: R, yaw: yaw, pitch: pitch, physDx: physDx, physDy: physDy, roll: outfitRoll)
+        let isCasting = state == .thinking || state == .working || state == .searching
+        let isLowBattery = MacHealthManager.shared.isLowBattery
+        let mH = MochiH(R: R, yaw: yaw, pitch: pitch, physDx: physDx, physDy: physDy, roll: outfitRoll,
+                        isCasting: isCasting, isLowBattery: isLowBattery, botState: state)
         drawOutfitBehindStatic(context: context, outfit: outfit, H: mH,
                                cx: cx, cy: cy, tilt: tilt, sx: sx, sy: sy,
                                roll: outfitRoll, morph: morph, isMini: isMini,
@@ -1177,7 +1180,10 @@ final class BotEngine: ObservableObject {
         let cy = H / 2 + particleOverhang / 2 + oy * R + R * 0.06
         // Rigid roll: accessories see roll=0 (they rotate with the body via context transform)
         let outfitRoll: CGFloat = outfitPresence > 0.05 ? 0 : roll
-        let mH = MochiH(R: R, yaw: yaw, pitch: pitch, physDx: physDx, physDy: physDy, roll: outfitRoll)
+        let isCasting = state == .thinking || state == .working || state == .searching
+        let isLowBattery = MacHealthManager.shared.isLowBattery
+        let mH = MochiH(R: R, yaw: yaw, pitch: pitch, physDx: physDx, physDy: physDy, roll: outfitRoll,
+                        isCasting: isCasting, isLowBattery: isLowBattery, botState: state)
         drawOutfitFrontStatic(context: context, outfit: outfit, H: mH,
                               cx: cx, cy: cy, tilt: tilt, sx: sx, sy: sy,
                               roll: outfitRoll, morph: morph, isMini: isMini,

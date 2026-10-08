@@ -313,6 +313,8 @@ struct WidgetCardView: View {
         case "widget_timer":      TimerCardView(task: task)
         case "widget_stopwatch":  StopwatchCardView(task: task)
         case "widget_calendar":   CalendarCardView(task: task)
+        case "widget_nowplaying": NowPlayingCardView(task: task)
+        case "widget_battery":    MacHealthCardView(task: task)
         default:                  EmptyView()
         }
     }
@@ -320,16 +322,18 @@ struct WidgetCardView: View {
 
 struct WidgetCardHeader: View {
     let task: AgentTask
+    var overrideColor: String? = nil
+    var overrideSubtitle: String? = nil
 
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(Color(hex: task.color))
+                .fill(Color(hex: overrideColor ?? task.color))
                 .frame(width: 7, height: 7)
             Text(task.name)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Color(hex: "#F5F6F8"))
-            Text("Widget")
+            Text(overrideSubtitle ?? "Widget")
                 .font(.system(size: 11))
                 .foregroundColor(Color(hex: "#8E939C"))
             Spacer(minLength: 2)
@@ -612,12 +616,16 @@ public struct CalendarEventItem: Identifiable, Codable, Sendable {
     public var title: String
     public var date: Date
     public var timeString: String
+    public var notes: String?
+    public var urlString: String?
 
-    public init(id: UUID = UUID(), title: String, date: Date, timeString: String = "") {
+    public init(id: UUID = UUID(), title: String, date: Date, timeString: String = "", notes: String? = nil, urlString: String? = nil) {
         self.id = id
         self.title = title
         self.date = date
         self.timeString = timeString
+        self.notes = notes
+        self.urlString = urlString
     }
 }
 
@@ -960,5 +968,290 @@ struct CalendarCardView: View {
         .padding(.trailing, 14)
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+// MARK: - Now Playing Card View (Widget)
+
+struct NowPlayingCardView: View {
+    let task: AgentTask
+    @ObservedObject private var manager = NowPlayingManager.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            WidgetCardHeader(
+                task: task,
+                overrideColor: manager.playerColor,
+                overrideSubtitle: manager.player.isEmpty ? "Media" : manager.player
+            )
+
+            if manager.title.isEmpty && !manager.isPlaying {
+                VStack(spacing: 6) {
+                    Spacer()
+                    Image(systemName: "play.rectangle.on.rectangle")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color(hex: "#6B7079"))
+                    Text("No Media Playing")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color(hex: "#8E939C"))
+                    Text("Play Spotify, Apple Music, or YouTube in browser")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(Color(hex: "#6B7079"))
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    // Album art / EQ container with player theme
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(hex: manager.playerColor).opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(hex: manager.playerColor).opacity(0.3), lineWidth: 1)
+                            )
+                            .frame(width: 48, height: 48)
+
+                        if manager.isPlaying {
+                            AudioEqualizerBars(isPlaying: true, tintColor: Color(hex: manager.playerColor))
+                        } else {
+                            Image(systemName: manager.playerIcon)
+                                .font(.system(size: 18))
+                                .foregroundColor(Color(hex: manager.playerColor))
+                        }
+                    }
+
+                    // Title & Artist / Channel
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(manager.title.isEmpty ? "Unknown Media" : manager.title)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundColor(Color(hex: "#F5F6F8"))
+                            .lineLimit(1)
+
+                        Text(manager.artist.isEmpty ? (manager.player.isEmpty ? "Media" : manager.player) : manager.artist)
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#8E939C"))
+                            .lineLimit(1)
+
+                        if !manager.player.isEmpty {
+                            HStack(spacing: 3) {
+                                if manager.player == "YouTube" {
+                                    Image(systemName: "play.rectangle.fill")
+                                        .font(.system(size: 7))
+                                } else if manager.player == "Spotify" {
+                                    Image(systemName: "waveform")
+                                        .font(.system(size: 7))
+                                } else {
+                                    Image(systemName: "music.note")
+                                        .font(.system(size: 7))
+                                }
+
+                                Text(manager.sourceBrowser.isEmpty ? manager.player : "\(manager.player) • \(manager.sourceBrowser)")
+                                    .font(.system(size: 8.5, weight: .semibold))
+                            }
+                            .foregroundColor(Color(hex: manager.playerColor))
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(Color(hex: manager.playerColor).opacity(0.16))
+                            .cornerRadius(3.5)
+                        }
+                    }
+
+                    Spacer()
+
+                    // Playback Controls
+                    HStack(spacing: 6) {
+                        Button { manager.previousTrack() } label: {
+                            Image(systemName: "backward.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "#8E939C"))
+                                .frame(width: 22, height: 22)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Previous / Replay")
+
+                        Button { manager.togglePlayPause() } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(hex: manager.playerColor))
+                                    .frame(width: 26, height: 26)
+                                Image(systemName: manager.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(manager.player == "YouTube" ? .white : .black)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help(manager.isPlaying ? "Pause" : "Play")
+
+                        Button { manager.nextTrack() } label: {
+                            Image(systemName: "forward.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "#8E939C"))
+                                .frame(width: 22, height: 22)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Next / Skip")
+
+                        if !manager.player.isEmpty {
+                            Button { manager.openActiveMedia() } label: {
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .foregroundColor(Color(hex: "#8E939C"))
+                                    .frame(width: 22, height: 22)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(manager.player == "YouTube" ? "Switch to YouTube" : "Open \(manager.player)")
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(.leading, 106)
+        .padding(.trailing, 14)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+// MARK: - Animated Equalizer Bars
+
+struct AudioEqualizerBars: View {
+    let isPlaying: Bool
+    var tintColor: Color = Color(hex: "#10B981")
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.12)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2.5) {
+                ForEach(0..<4, id: \.self) { i in
+                    let phase = Double(i) * 1.3
+                    let heightFactor = isPlaying ? abs(sin(t * 5.0 + phase)) : 0.2
+                    let barH = CGFloat(6.0 + heightFactor * 16.0)
+
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(tintColor)
+                        .frame(width: 3, height: barH)
+                }
+            }
+            .frame(height: 24)
+        }
+    }
+}
+
+// MARK: - Mac Health Card View (Widget)
+
+struct MacHealthCardView: View {
+    let task: AgentTask
+    @ObservedObject private var health = MacHealthManager.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            WidgetCardHeader(task: task)
+
+            HStack(spacing: 14) {
+                // Battery Gauge Box
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Image(systemName: health.batterySymbol)
+                            .font(.system(size: 14))
+                            .foregroundColor(health.isLowBattery ? Color(hex: "#EF4444") : Color(hex: "#06B6D4"))
+                        Text("\(health.batteryPercentage)%")
+                            .font(.system(size: 15, weight: .bold).monospacedDigit())
+                            .foregroundColor(Color(hex: "#F5F6F8"))
+                    }
+
+                    Text(health.isCharging ? "Charging" : (health.isACPower ? "Power Adapter" : "On Battery"))
+                        .font(.system(size: 9.5))
+                        .foregroundColor(Color(hex: "#8E939C"))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(hex: "#1A1D24"))
+                .cornerRadius(8)
+
+                // Thermal State Box
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(thermalColor(health.thermalState))
+                        Text(health.thermalDescription)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Color(hex: "#F5F6F8"))
+                    }
+
+                    Text("Thermal State")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(Color(hex: "#8E939C"))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(hex: "#1A1D24"))
+                .cornerRadius(8)
+
+                Spacer()
+            }
+            .padding(.top, 2)
+
+            // Upcoming Meeting heads-up banner if present
+            if let meeting = health.upcomingMeeting {
+                HStack(spacing: 6) {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 9.5))
+                        .foregroundColor(Color(hex: "#E879F9"))
+
+                    Text(meeting.title)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color(hex: "#F5F6F8"))
+                        .lineLimit(1)
+
+                    Text(meeting.countdownLabel)
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundColor(Color(hex: "#E879F9"))
+
+                    Spacer()
+
+                    if meeting.callURL != nil {
+                        Button {
+                            health.joinMeeting()
+                        } label: {
+                            Text("Join")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color(hex: "#E879F9"))
+                                .cornerRadius(4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(hex: "#262933"))
+                .cornerRadius(6)
+            }
+        }
+        .padding(.leading, 106)
+        .padding(.trailing, 14)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func thermalColor(_ state: ProcessInfo.ThermalState) -> Color {
+        switch state {
+        case .nominal:  return Color(hex: "#10B981")
+        case .fair:     return Color(hex: "#F59E0B")
+        case .serious:  return Color(hex: "#F97316")
+        case .critical: return Color(hex: "#EF4444")
+        @unknown default: return Color(hex: "#8E939C")
+        }
     }
 }

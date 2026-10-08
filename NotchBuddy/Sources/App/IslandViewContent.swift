@@ -125,7 +125,7 @@ struct OverviewView: View {
                 }
 
                 // ↗ jump button — last in ZStack so it renders on top; hidden while any detail is open
-                let isWidgetFocus = agent.map { PillCatalog.widgetIds.contains($0.id) } ?? false
+                let isWidgetFocus = agent.map { PillCatalog.allWidgetIds.contains($0.id) } ?? false
                 #if !APPSTORE
                 let hideJumpButton = showingN8nDetail || state.showingPlanDetail || activeDiffId != nil || isWidgetFocus
                 #else
@@ -1870,7 +1870,7 @@ struct IntegrationCardView: View {
     }
 
     var body: some View {
-        if PillCatalog.widgetIds.contains(task.id) {
+        if PillCatalog.allWidgetIds.contains(task.id) {
             WidgetCardView(task: task)
                 .transition(.opacity)
         } else if showingDetail && n8nHasActivity {
@@ -3770,56 +3770,149 @@ struct AgentPillsView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(displayTasks) { task in
-                    #if !APPSTORE
-                    if PillCatalog.widgetIds.contains(task.id) {
-                        WidgetPill(task: task, state: state, swapping: $swapping) {
-                            swapping = true
-                            state.setFocus(task.id)
-                            SoundEngine.shared.play("blip")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                LazyVGrid(columns: columns, spacing: 4) {
+                    ForEach(displayTasks) { task in
+                        #if !APPSTORE
+                        if PillCatalog.widgetIds.contains(task.id) {
+                            WidgetPill(task: task, state: state, swapping: $swapping) {
+                                swapping = true
+                                state.setFocus(task.id)
+                                SoundEngine.shared.play("blip")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                            }
+                        } else if task.id == "integration_music" {
+                            MusicPill(task: task, state: state, swapping: $swapping) {
+                                swapping = true
+                                state.setFocus(task.id)
+                                SoundEngine.shared.play("blip")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                            }
+                        } else {
+                            AgentPill(task: task, state: state, swapping: $swapping) {
+                                swapping = true
+                                state.setFocus(task.id)
+                                SoundEngine.shared.play("blip")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                            }
                         }
-                    } else if task.id == "integration_music" {
-                        MusicPill(task: task, state: state, swapping: $swapping) {
-                            swapping = true
-                            state.setFocus(task.id)
-                            SoundEngine.shared.play("blip")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                        #else
+                        if PillCatalog.widgetIds.contains(task.id) {
+                            WidgetPill(task: task, state: state, swapping: $swapping) {
+                                swapping = true
+                                state.setFocus(task.id)
+                                SoundEngine.shared.play("blip")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                            }
+                        } else {
+                            AgentPill(task: task, state: state, swapping: $swapping) {
+                                swapping = true
+                                state.setFocus(task.id)
+                                SoundEngine.shared.play("blip")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                            }
                         }
-                    } else {
-                        AgentPill(task: task, state: state, swapping: $swapping) {
-                            swapping = true
-                            state.setFocus(task.id)
-                            SoundEngine.shared.play("blip")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
-                        }
+                        #endif
                     }
-                    #else
-                    if PillCatalog.widgetIds.contains(task.id) {
-                        WidgetPill(task: task, state: state, swapping: $swapping) {
-                            swapping = true
-                            state.setFocus(task.id)
-                            SoundEngine.shared.play("blip")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
-                        }
-                    } else {
-                        AgentPill(task: task, state: state, swapping: $swapping) {
-                            swapping = true
-                            state.setFocus(task.id)
-                            SoundEngine.shared.play("blip")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
-                        }
-                    }
-                    #endif
                 }
+                .padding(.horizontal, 8)
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8)
-            Spacer(minLength: 0)
+
+            // Bottom-right corner quick actions: icons only in a straight line
+            CornerQuickActionsBar(state: state)
+                .padding(.trailing, 8)
+                .padding(.bottom, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Corner Quick Actions Bar (Icons only, straight line)
+
+struct CornerQuickActionsBar: View {
+    @ObservedObject var state: AppState
+    @ObservedObject private var nowPlaying = NowPlayingManager.shared
+    @ObservedObject private var health = MacHealthManager.shared
+
+    var body: some View {
+        HStack(spacing: 5) {
+            // 1. Now Playing Icon
+            Button {
+                ensureTask(id: "widget_nowplaying", name: "Now Playing", color: nowPlaying.playerColor)
+                state.setFocus("widget_nowplaying")
+                SoundEngine.shared.play("blip")
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(state.focusId == "widget_nowplaying" ? Color(hex: nowPlaying.playerColor) : Color.white.opacity(0.08))
+                        .frame(width: 20, height: 20)
+
+                    if nowPlaying.isPlaying {
+                        AudioEqualizerBars(isPlaying: true, tintColor: state.focusId == "widget_nowplaying" ? (nowPlaying.player == "YouTube" ? .white : .black) : Color(hex: nowPlaying.playerColor))
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: nowPlaying.playerIcon)
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(state.focusId == "widget_nowplaying" ? (nowPlaying.player == "YouTube" ? .white : .black) : Color(hex: nowPlaying.playerColor))
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .help(nowPlaying.title.isEmpty ? "Now Playing" : "\(nowPlaying.title) (\(nowPlaying.player.isEmpty ? "Media" : nowPlaying.player))")
+
+            // 2. Mac Health / Battery Icon
+            Button {
+                ensureTask(id: "widget_battery", name: "Mac Health", color: "#06B6D4")
+                state.setFocus("widget_battery")
+                SoundEngine.shared.play("blip")
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(state.focusId == "widget_battery" ? Color(hex: "#06B6D4") : Color.white.opacity(0.08))
+                        .frame(width: 20, height: 20)
+
+                    Image(systemName: health.batterySymbol)
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(state.focusId == "widget_battery" ? .black : (health.isLowBattery ? Color(hex: "#EF4444") : Color(hex: "#8E939C")))
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Mac Health: \(health.batteryPercentage)%, \(health.thermalDescription)")
+
+            // 3. Upcoming Meeting Icon (if present)
+            if let meeting = health.upcomingMeeting {
+                Button {
+                    health.joinMeeting()
+                    SoundEngine.shared.play("blip")
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color(hex: "#E879F9").opacity(0.2))
+                            .frame(width: 20, height: 20)
+
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(Color(hex: "#E879F9"))
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("\(meeting.title) (\(meeting.countdownLabel)) - Click to Join")
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 3)
+        .background(Color(hex: "#14161C").opacity(0.80))
+        .cornerRadius(6)
+    }
+
+    private func ensureTask(id: String, name: String, color: String) {
+        if !state.tasks.contains(where: { $0.id == id }) {
+            state.addTask(AgentTask(id: id, name: name, color: color, state: .idle, steps: [], source: .n8n))
+        }
     }
 }
 

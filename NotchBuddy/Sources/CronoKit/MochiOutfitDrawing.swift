@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreGraphics
+import QuartzCore
 
 // MARK: - Constants (mirror JS)
 
@@ -19,9 +20,13 @@ struct MochiH {
     let view: CGFloat      // = VIEW_TILT (-0.30)
     let physDx, physDy: CGFloat
     let roll: CGFloat
+    let isCasting: Bool
+    let isLowBattery: Bool
+    let botState: BotState
 
     init(R: CGFloat, yaw: CGFloat = 0, pitch: CGFloat = 0,
-         physDx: CGFloat = 0, physDy: CGFloat = 0, roll: CGFloat = 0) {
+         physDx: CGFloat = 0, physDy: CGFloat = 0, roll: CGFloat = 0,
+         isCasting: Bool = false, isLowBattery: Bool = false, botState: BotState = .idle) {
         self.R = R
         self.rx = R * 1.14
         self.ry = R * 0.88
@@ -31,6 +36,9 @@ struct MochiH {
         self.physDx = physDx
         self.physDy = physDy
         self.roll = roll
+        self.isCasting = isCasting
+        self.isLowBattery = isLowBattery
+        self.botState = botState
     }
 }
 
@@ -922,6 +930,7 @@ private func drawCrownPart(ctx: inout GraphicsContext, H: MochiH, side: CGFloat,
 // MARK: - Witch hat
 
 private func drawWitchHatBack(ctx: inout GraphicsContext, H: MochiH) {
+    drawMochiFeet(ctx: &ctx, H: H)
     let pts = witchBrimPts(H)
     let back = pts.filter { $0.z < 0.05 }.sorted { $0.x < $1.x }
     guard !back.isEmpty else { return }
@@ -1088,6 +1097,240 @@ private func drawWitchHatFront(ctx: inout GraphicsContext, H: MochiH, bodyPath: 
         cornerSize: CGSize(width: bh * 0.10, height: bh * 0.10)
     )
     bkCtx.fill(hole, with: .color(Color(hex: "#C2410C")))
+
+    // Draw small marshmallow hands & golden star magic wand!
+    drawMochiHandsAndWand(ctx: &ctx, H: H)
+}
+
+// MARK: - Mochi Feet (Legs underneath body)
+private func drawMochiFeet(ctx: inout GraphicsContext, H: MochiH) {
+    let footW = H.R * 0.28
+    let footH = H.R * 0.32
+    let footY = H.ry * 0.72 + H.physDy * 0.2
+    let sway = H.physDx * 0.15
+
+    let footPositions = [
+        CGPoint(x: -H.rx * 0.38 + sway, y: footY),
+        CGPoint(x:  H.rx * 0.38 + sway, y: footY)
+    ]
+
+    for (idx, pos) in footPositions.enumerated() {
+        var fCtx = ctx
+        fCtx.translateBy(x: pos.x, y: pos.y)
+        let tilt = (idx == 0 ? -0.14 : 0.14) + sway * 0.2
+        fCtx.rotate(by: .radians(tilt))
+
+        var footPath = Path()
+        footPath.addRoundedRect(
+            in: CGRect(x: -footW / 2, y: 0, width: footW, height: footH),
+            cornerSize: CGSize(width: footW / 2, height: footW / 2)
+        )
+
+        // Gradient matching Mochi's squishy pink body with subtle shadow
+        fCtx.fill(footPath, with: .linearGradient(
+            Gradient(stops: [
+                .init(color: Color(hex: "#F9A8D4"), location: 0),
+                .init(color: Color(hex: "#F472B6"), location: 0.6),
+                .init(color: Color(hex: "#DB2777"), location: 1.0)
+            ]),
+            startPoint: CGPoint(x: 0, y: 0),
+            endPoint: CGPoint(x: 0, y: footH)
+        ))
+    }
+}
+
+// MARK: - Mochi Hands & Golden Star Magic Wand
+private func drawMochiHandsAndWand(ctx: inout GraphicsContext, H: MochiH) {
+    let handR = H.R * 0.18
+
+    // 1. Left Hand (cute marshmallow nub on the left)
+    let leftHandPos = CGPoint(x: -H.rx * 0.88 + H.physDx * 0.1, y: H.ry * 0.20 + H.physDy * 0.1)
+    var lhCtx = ctx
+    lhCtx.translateBy(x: leftHandPos.x, y: leftHandPos.y)
+    lhCtx.rotate(by: .radians(-0.25))
+    var lhPath = Path()
+    lhPath.addEllipse(in: CGRect(x: -handR, y: -handR * 0.85, width: handR * 2, height: handR * 1.7))
+    lhCtx.fill(lhPath, with: .linearGradient(
+        Gradient(stops: [
+            .init(color: Color(hex: "#FDF2F8"), location: 0),
+            .init(color: Color(hex: "#F472B6"), location: 1)
+        ]),
+        startPoint: CGPoint(x: 0, y: -handR),
+        endPoint: CGPoint(x: 0, y: handR)
+    ))
+    lhCtx.stroke(lhPath, with: .color(Color(hex: "#DB2777").opacity(0.35)), lineWidth: 1)
+
+    // 2. Right Hand & Option 2: Crystal Gem Wizard Staff
+    let staffAngle: Double = 0.34 + Double(H.physDx * 0.2) // tilt angle
+    let handPos = CGPoint(x: H.rx * 0.82 + H.physDx * 0.1, y: H.ry * 0.14 + H.physDy * 0.1)
+
+    var staffCtx = ctx
+    staffCtx.translateBy(x: handPos.x, y: handPos.y)
+    staffCtx.rotate(by: .radians(staffAngle))
+
+    // Twisted wooden staff shaft
+    let staffLength: CGFloat = H.R * 1.65
+    let staffWidth: CGFloat = H.R * 0.085
+    var shaft = Path()
+    shaft.addRoundedRect(
+        in: CGRect(x: -staffWidth / 2, y: -staffLength * 0.70, width: staffWidth, height: staffLength),
+        cornerSize: CGSize(width: staffWidth / 2, height: staffWidth / 2)
+    )
+    staffCtx.fill(shaft, with: .linearGradient(
+        Gradient(stops: [
+            .init(color: Color(hex: "#A16207"), location: 0),
+            .init(color: Color(hex: "#78350F"), location: 0.45),
+            .init(color: Color(hex: "#451A03"), location: 1.0)
+        ]),
+        startPoint: CGPoint(x: -staffWidth / 2, y: 0),
+        endPoint: CGPoint(x: staffWidth / 2, y: 0)
+    ))
+
+    // Wooden prongs / cradle holding the crystal at the top of the staff
+    let crystalCenter = CGPoint(x: 0, y: -staffLength * 0.72)
+    let gemW: CGFloat = H.R * 0.30
+    let gemH: CGFloat = H.R * 0.46
+
+    var prongs = Path()
+    prongs.move(to: CGPoint(x: -staffWidth * 0.6, y: -staffLength * 0.66))
+    prongs.addQuadCurve(to: CGPoint(x: -gemW * 0.55, y: crystalCenter.y + gemH * 0.1),
+                        control: CGPoint(x: -gemW * 0.65, y: -staffLength * 0.68))
+    prongs.addQuadCurve(to: CGPoint(x: -staffWidth * 0.2, y: -staffLength * 0.69),
+                        control: CGPoint(x: -gemW * 0.35, y: crystalCenter.y + gemH * 0.25))
+
+    prongs.move(to: CGPoint(x: staffWidth * 0.6, y: -staffLength * 0.66))
+    prongs.addQuadCurve(to: CGPoint(x: gemW * 0.55, y: crystalCenter.y + gemH * 0.1),
+                        control: CGPoint(x: gemW * 0.65, y: -staffLength * 0.68))
+    prongs.addQuadCurve(to: CGPoint(x: staffWidth * 0.2, y: -staffLength * 0.69),
+                        control: CGPoint(x: gemW * 0.35, y: crystalCenter.y + gemH * 0.25))
+    staffCtx.stroke(prongs, with: .color(Color(hex: "#5C2B09")), lineWidth: staffWidth * 0.65)
+
+    let t = CGFloat(CACurrentMediaTime())
+    let isCasting = H.isCasting
+    let isFinished = H.botState == .finished
+    let isLowBattery = H.isLowBattery
+
+    let glowSpeed: CGFloat = isCasting ? 7.5 : 3.2
+    let pulseAmp: CGFloat = isCasting ? 0.32 : (isLowBattery ? 0.08 : 0.14)
+    let glowPulse = 1.0 + pulseAmp * sin(t * glowSpeed)
+    let gemAuraRadius = gemW * (isCasting ? 2.2 : 1.5) * glowPulse
+
+    // Radiant Cyan / Ice Blue Magic Glow Aura with breathing pulse & casting surge
+    let auraColor1 = isCasting ? Color(hex: "#67E8F9") : (isFinished ? Color(hex: "#FDE047") : Color(hex: "#38BDF8"))
+    let auraColor2 = isCasting ? Color(hex: "#06B6D4") : (isFinished ? Color(hex: "#F59E0B") : Color(hex: "#0284C7"))
+    let auraOpacity = isCasting ? 0.85 : (isLowBattery ? 0.35 : 0.60)
+
+    var glow = Path()
+    glow.addEllipse(in: CGRect(x: crystalCenter.x - gemAuraRadius,
+                               y: crystalCenter.y - (gemH * 1.1) * glowPulse,
+                               width: gemAuraRadius * 2.0,
+                               height: gemH * 2.2 * glowPulse))
+    staffCtx.fill(glow, with: .radialGradient(
+        Gradient(stops: [
+            .init(color: auraColor1.opacity(auraOpacity + 0.15 * Double(sin(t * glowSpeed))), location: 0),
+            .init(color: auraColor2.opacity(0.20 + 0.08 * Double(sin(t * glowSpeed))), location: 0.55),
+            .init(color: .clear, location: 1.0)
+        ]),
+        center: crystalCenter,
+        startRadius: 0,
+        endRadius: gemAuraRadius
+    ))
+
+    // Orbiting Magical Runes / Energy Orbs while AI Agent is casting/thinking
+    if isCasting {
+        let orbRadius = gemW * 1.15
+        for orbIdx in 0..<3 {
+            let orbAngle = Double(t * 5.0) + Double(orbIdx) * (2.0 * Double.pi / 3.0)
+            let ox = crystalCenter.x + CGFloat(cos(orbAngle)) * orbRadius
+            let oy = crystalCenter.y + CGFloat(sin(orbAngle)) * (orbRadius * 0.6)
+            var orbPath = Path()
+            let orbSize: CGFloat = gemW * 0.22
+            orbPath.addEllipse(in: CGRect(x: ox - orbSize / 2, y: oy - orbSize / 2, width: orbSize, height: orbSize))
+            staffCtx.fill(orbPath, with: .color(Color(hex: "#A5F3FC")))
+        }
+    }
+
+    // Faceted Crystal Gemstone Path
+    var crystal = Path()
+    crystal.move(to: CGPoint(x: crystalCenter.x, y: crystalCenter.y - gemH * 0.52)) // top vertex
+    crystal.addLine(to: CGPoint(x: crystalCenter.x + gemW * 0.48, y: crystalCenter.y - gemH * 0.15)) // upper right
+    crystal.addLine(to: CGPoint(x: crystalCenter.x + gemW * 0.40, y: crystalCenter.y + gemH * 0.35)) // lower right
+    crystal.addLine(to: CGPoint(x: crystalCenter.x, y: crystalCenter.y + gemH * 0.50)) // bottom tip
+    crystal.addLine(to: CGPoint(x: crystalCenter.x - gemW * 0.40, y: crystalCenter.y + gemH * 0.35)) // lower left
+    crystal.addLine(to: CGPoint(x: crystalCenter.x - gemW * 0.48, y: crystalCenter.y - gemH * 0.15)) // upper left
+    crystal.closeSubpath()
+
+    // Crystal Body Fill: Sapphire to Cyan gradient (or Gold if finished)
+    let cTop = isFinished ? Color(hex: "#FEF08A") : Color(hex: "#E0F2FE")
+    let cMid1 = isFinished ? Color(hex: "#FACC15") : Color(hex: "#38BDF8")
+    let cMid2 = isFinished ? Color(hex: "#EAB308") : Color(hex: "#0284C7")
+    let cBot = isFinished ? Color(hex: "#CA8A04") : Color(hex: "#0369A1")
+
+    staffCtx.fill(crystal, with: .linearGradient(
+        Gradient(stops: [
+            .init(color: cTop, location: 0.0),
+            .init(color: cMid1, location: 0.35),
+            .init(color: cMid2, location: 0.70),
+            .init(color: cBot, location: 1.0)
+        ]),
+        startPoint: CGPoint(x: crystalCenter.x - gemW * 0.3, y: crystalCenter.y - gemH * 0.52),
+        endPoint: CGPoint(x: crystalCenter.x + gemW * 0.3, y: crystalCenter.y + gemH * 0.50)
+    ))
+
+    // Inner Facet Highlight (creates glass/gemstone depth)
+    var innerFacet = Path()
+    innerFacet.move(to: CGPoint(x: crystalCenter.x, y: crystalCenter.y - gemH * 0.52))
+    innerFacet.addLine(to: CGPoint(x: crystalCenter.x - gemW * 0.48, y: crystalCenter.y - gemH * 0.15))
+    innerFacet.addLine(to: CGPoint(x: crystalCenter.x, y: crystalCenter.y + gemH * 0.10))
+    innerFacet.closeSubpath()
+    staffCtx.fill(innerFacet, with: .linearGradient(
+        Gradient(stops: [
+            .init(color: Color.white.opacity(isCasting ? 0.90 : 0.70), location: 0),
+            .init(color: Color(hex: "#BAE6FD").opacity(0.20), location: 1)
+        ]),
+        startPoint: CGPoint(x: crystalCenter.x, y: crystalCenter.y - gemH * 0.5),
+        endPoint: CGPoint(x: crystalCenter.x - gemW * 0.4, y: crystalCenter.y)
+    ))
+
+    // Crystal outer facet outline
+    staffCtx.stroke(crystal, with: .color(Color(hex: "#F0F9FF").opacity(isCasting ? 1.0 : 0.85)), lineWidth: H.R * 0.02)
+
+    // Floating Magical Sparkles around Crystal Gem (with dynamic floating twinkle)
+    let sparkles: [(CGPoint, CGFloat, CGFloat)] = [
+        (CGPoint(x: crystalCenter.x + gemW * 0.9, y: crystalCenter.y - gemH * 0.4 + sin(t * 2.1) * 1.5), gemW * 0.30, t * 1.2),
+        (CGPoint(x: crystalCenter.x - gemW * 0.85, y: crystalCenter.y - gemH * 0.3 + cos(t * 2.4) * 1.5), gemW * 0.25, -t * 1.0),
+        (CGPoint(x: crystalCenter.x + gemW * 0.7, y: crystalCenter.y + gemH * 0.45 + sin(t * 2.8) * 1.2), gemW * 0.20, t * 1.5)
+    ]
+    let sparkleColor = isFinished ? Color(hex: "#FEF08A") : Color(hex: "#E0F2FE")
+    for (sCenter, baseSize, rotOffset) in sparkles {
+        let twinkleFreq: CGFloat = isCasting ? 8.0 : 4.2
+        let sSize = baseSize * (0.82 + 0.26 * sin(t * twinkleFreq + rotOffset)) * (isCasting ? 1.3 : 1.0)
+        var sp = Path()
+        for i in 0..<8 {
+            let angle = Double(i) * Double.pi / 4.0 + Double(rotOffset * 0.3)
+            let r = i % 2 == 0 ? sSize : sSize * 0.22
+            let pt = CGPoint(x: sCenter.x + CGFloat(cos(angle)) * r,
+                             y: sCenter.y + CGFloat(sin(angle)) * r)
+            if i == 0 { sp.move(to: pt) } else { sp.addLine(to: pt) }
+        }
+        sp.closeSubpath()
+        staffCtx.fill(sp, with: .color(sparkleColor.opacity(0.70 + 0.30 * Double(sin(t * twinkleFreq + rotOffset)))))
+    }
+
+    // Right Hand (marshmallow nub firmly gripping the staff)
+    var rhCtx = ctx
+    rhCtx.translateBy(x: handPos.x, y: handPos.y)
+    var rhPath = Path()
+    rhPath.addEllipse(in: CGRect(x: -handR, y: -handR * 0.85, width: handR * 2, height: handR * 1.7))
+    rhCtx.fill(rhPath, with: .linearGradient(
+        Gradient(stops: [
+            .init(color: Color(hex: "#FDF2F8"), location: 0),
+            .init(color: Color(hex: "#F472B6"), location: 1)
+        ]),
+        startPoint: CGPoint(x: 0, y: -handR),
+        endPoint: CGPoint(x: 0, y: handR)
+    ))
+    rhCtx.stroke(rhPath, with: .color(Color(hex: "#DB2777").opacity(0.35)), lineWidth: 1)
 }
 
 // MARK: - Sunglasses
