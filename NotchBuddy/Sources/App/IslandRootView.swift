@@ -522,7 +522,7 @@ struct IslandHeader: View {
                 if nowPlaying.isPlaying {
                     Button {
                         if !state.tasks.contains(where: { $0.id == "widget_nowplaying" }) {
-                            state.addTask(AgentTask(id: "widget_nowplaying", name: "Now Playing", color: nowPlaying.playerColor, state: .idle, steps: [], source: .n8n))
+                            state.addTask(AgentTask(id: "widget_nowplaying", name: "Now Playing", color: nowPlaying.playerColor, state: .idle, steps: [], source: .agent))
                         }
                         state.setFocus("widget_nowplaying")
                     } label: {

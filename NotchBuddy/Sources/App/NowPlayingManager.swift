@@ -75,6 +75,7 @@ final class NowPlayingManager: ObservableObject {
     @Published var playerIcon: String = "music.note"
     @Published var mediaUrl: String = ""
     @Published var sourceBrowser: String = ""
+    @Published var thumbnailUrl: String? = nil
 
     // Internal trackers
     private var spotifyIsPlaying = false
@@ -271,6 +272,15 @@ final class NowPlayingManager: ObservableObject {
         return (title: cleaned.isEmpty ? "YouTube Video" : cleaned, artist: "YouTube")
     }
 
+    static func parseYouTubeVideoId(_ url: String) -> String? {
+        if let match = url.range(of: #"(?:v=|\/vi\/|\/embed\/|\/shorts\/|youtu\.be\/|\/v\/|\/e\/|watch\?v=)([^#&?\/]{11})"#, options: .regularExpression) {
+            let matched = String(url[match])
+            let id = String(matched.suffix(11))
+            if id.count == 11 { return id }
+        }
+        return nil
+    }
+
     // MARK: - State Arbitration
 
     private func recomputeActivePlayer() {
@@ -284,6 +294,7 @@ final class NowPlayingManager: ObservableObject {
             album = spotifyAlbum
             mediaUrl = ""
             sourceBrowser = ""
+            thumbnailUrl = nil
             isPlaying = true
             return
         }
@@ -298,6 +309,7 @@ final class NowPlayingManager: ObservableObject {
             album = musicAlbum
             mediaUrl = ""
             sourceBrowser = ""
+            thumbnailUrl = nil
             isPlaying = true
             return
         }
@@ -313,6 +325,11 @@ final class NowPlayingManager: ObservableObject {
             mediaUrl = youtubeUrl
             sourceBrowser = youtubeBrowser
             isPlaying = youtubeIsPlaying
+            if let videoId = Self.parseYouTubeVideoId(youtubeUrl) {
+                thumbnailUrl = "https://img.youtube.com/vi/\(videoId)/mqdefault.jpg"
+            } else {
+                thumbnailUrl = nil
+            }
             return
         }
 
@@ -326,6 +343,7 @@ final class NowPlayingManager: ObservableObject {
             album = spotifyAlbum
             mediaUrl = ""
             sourceBrowser = ""
+            thumbnailUrl = nil
             isPlaying = false
             return
         }
@@ -340,6 +358,7 @@ final class NowPlayingManager: ObservableObject {
             album = musicAlbum
             mediaUrl = ""
             sourceBrowser = ""
+            thumbnailUrl = nil
             isPlaying = false
             return
         }
@@ -353,6 +372,7 @@ final class NowPlayingManager: ObservableObject {
         album = ""
         mediaUrl = ""
         sourceBrowser = ""
+        thumbnailUrl = nil
         isPlaying = false
     }
 

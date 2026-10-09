@@ -52,6 +52,8 @@ struct OverviewView: View {
                         IntegrationCardView(task: agent, showingDetail: $showingN8nDetail, onDiffTap: { diffIdx in
                             withAnimation(.easeIn(duration: 0.16)) { activeDiffId = diffIdx }
                         })
+                    } else if PillCatalog.allWidgetIds.contains(agent.id) || agent.id.starts(with: "widget_") {
+                        WidgetCardView(task: agent)
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 6) {
@@ -3911,7 +3913,7 @@ struct CornerQuickActionsBar: View {
 
     private func ensureTask(id: String, name: String, color: String) {
         if !state.tasks.contains(where: { $0.id == id }) {
-            state.addTask(AgentTask(id: id, name: name, color: color, state: .idle, steps: [], source: .n8n))
+            state.addTask(AgentTask(id: id, name: name, color: color, state: .idle, steps: [], source: .agent))
         }
     }
 }

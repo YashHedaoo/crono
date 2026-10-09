@@ -971,6 +971,136 @@ struct CalendarCardView: View {
     }
 }
 
+// MARK: - Rotating Vinyl CD Record View
+
+struct RotatingVinylRecordView: View {
+    let isPlaying: Bool
+    let thumbnailUrl: String?
+    let playerColor: String
+    let playerIcon: String
+    var discSize: CGFloat = 58
+
+    var body: some View {
+        TimelineView(.animation(paused: !isPlaying)) { timeline in
+            let angle = (timeline.date.timeIntervalSinceReferenceDate * 45).truncatingRemainder(dividingBy: 360)
+
+            ZStack {
+                // Outer Vinyl Black Disc
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(hex: "#222226"),
+                                Color(hex: "#111114"),
+                                Color(hex: "#050507"),
+                                Color(hex: "#010102")
+                            ],
+                            center: .center,
+                            startRadius: discSize * 0.15,
+                            endRadius: discSize * 0.5
+                        )
+                    )
+                    .frame(width: discSize, height: discSize)
+                    .shadow(color: Color.black.opacity(0.6), radius: 5, x: 0, y: 2)
+
+                // Vinyl sound grooves (concentric micro-rings)
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.8)
+                    .frame(width: discSize * 0.88, height: discSize * 0.88)
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.04), lineWidth: 0.7)
+                    .frame(width: discSize * 0.76, height: discSize * 0.76)
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.05), lineWidth: 0.8)
+                    .frame(width: discSize * 0.64, height: discSize * 0.64)
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.03), lineWidth: 0.6)
+                    .frame(width: discSize * 0.52, height: discSize * 0.52)
+
+                // Glossy specular reflection sheen (two opposing light flares)
+                Circle()
+                    .fill(
+                        AngularGradient(
+                            colors: [
+                                Color.white.opacity(0.18),
+                                Color.clear,
+                                Color.white.opacity(0.14),
+                                Color.clear,
+                                Color.white.opacity(0.18),
+                                Color.clear
+                            ],
+                            center: .center
+                        )
+                    )
+                    .frame(width: discSize, height: discSize)
+                    .blendMode(.screen)
+
+                // Center label circle (like the red center on a vinyl LP)
+                let labelSize = discSize * 0.44
+                ZStack {
+                    if let urlStr = thumbnailUrl, let url = URL(string: urlStr) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: labelSize, height: labelSize)
+                                    .clipShape(Circle())
+                            default:
+                                fallbackCenterLabel(size: labelSize)
+                            }
+                        }
+                        .frame(width: labelSize, height: labelSize)
+                        .clipShape(Circle())
+                    } else {
+                        fallbackCenterLabel(size: labelSize)
+                    }
+
+                    // Inner border ring around the center label
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                        .frame(width: labelSize, height: labelSize)
+
+                    // Center Spindle Hole with metallic rim
+                    Circle()
+                        .fill(Color(hex: "#050507"))
+                        .frame(width: discSize * 0.09, height: discSize * 0.09)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.4), lineWidth: 0.8)
+                        )
+                }
+                .frame(width: labelSize, height: labelSize)
+            }
+            .rotationEffect(.degrees(angle))
+            .animation(.linear(duration: 0.05), value: angle)
+        }
+        .frame(width: discSize, height: discSize)
+    }
+
+    private func fallbackCenterLabel(size: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(hex: playerColor),
+                            Color(hex: playerColor).opacity(0.85)
+                        ],
+                        center: .center,
+                        startRadius: 1,
+                        endRadius: size / 2
+                    )
+                )
+            Image(systemName: playerIcon)
+                .font(.system(size: size * 0.38, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 // MARK: - Now Playing Card View (Widget)
 
 struct NowPlayingCardView: View {
@@ -978,61 +1108,38 @@ struct NowPlayingCardView: View {
     @ObservedObject private var manager = NowPlayingManager.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             WidgetCardHeader(
                 task: task,
                 overrideColor: manager.playerColor,
-                overrideSubtitle: manager.player.isEmpty ? "Media" : manager.player
+                overrideSubtitle: manager.player.isEmpty ? "Media Player" : manager.player
             )
 
-            if manager.title.isEmpty && !manager.isPlaying {
-                VStack(spacing: 6) {
-                    Spacer()
-                    Image(systemName: "play.rectangle.on.rectangle")
-                        .font(.system(size: 20))
-                        .foregroundColor(Color(hex: "#6B7079"))
-                    Text("No Media Playing")
-                        .font(.system(size: 11, weight: .medium))
+            HStack(alignment: .center, spacing: 12) {
+                // 1. Spinning Vinyl Record / CD with Thumbnail in Center
+                RotatingVinylRecordView(
+                    isPlaying: manager.isPlaying,
+                    thumbnailUrl: manager.thumbnailUrl,
+                    playerColor: manager.playerColor,
+                    playerIcon: manager.playerIcon,
+                    discSize: 58
+                )
+
+                // 2. Track / Video Title, Artist, and Source Badge
+                VStack(alignment: .leading, spacing: 2.5) {
+                    Text(manager.title.isEmpty ? "Ready to Play" : manager.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color(hex: "#F5F6F8"))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Text(manager.artist.isEmpty ? (manager.player.isEmpty ? "Spotify • YouTube • Apple Music" : manager.player) : manager.artist)
+                        .font(.system(size: 10))
                         .foregroundColor(Color(hex: "#8E939C"))
-                    Text("Play Spotify, Apple Music, or YouTube in browser")
-                        .font(.system(size: 9.5))
-                        .foregroundColor(Color(hex: "#6B7079"))
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
-            } else {
-                HStack(alignment: .center, spacing: 12) {
-                    // Album art / EQ container with player theme
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(hex: manager.playerColor).opacity(0.12))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color(hex: manager.playerColor).opacity(0.3), lineWidth: 1)
-                            )
-                            .frame(width: 48, height: 48)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-                        if manager.isPlaying {
-                            AudioEqualizerBars(isPlaying: true, tintColor: Color(hex: manager.playerColor))
-                        } else {
-                            Image(systemName: manager.playerIcon)
-                                .font(.system(size: 18))
-                                .foregroundColor(Color(hex: manager.playerColor))
-                        }
-                    }
-
-                    // Title & Artist / Channel
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(manager.title.isEmpty ? "Unknown Media" : manager.title)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundColor(Color(hex: "#F5F6F8"))
-                            .lineLimit(1)
-
-                        Text(manager.artist.isEmpty ? (manager.player.isEmpty ? "Media" : manager.player) : manager.artist)
-                            .font(.system(size: 10))
-                            .foregroundColor(Color(hex: "#8E939C"))
-                            .lineLimit(1)
-
+                    HStack(spacing: 5) {
                         if !manager.player.isEmpty {
                             HStack(spacing: 3) {
                                 if manager.player == "YouTube" {
@@ -1055,63 +1162,89 @@ struct NowPlayingCardView: View {
                             .background(Color(hex: manager.playerColor).opacity(0.16))
                             .cornerRadius(3.5)
                         }
-                    }
 
-                    Spacer()
-
-                    // Playback Controls
-                    HStack(spacing: 6) {
-                        Button { manager.previousTrack() } label: {
-                            Image(systemName: "backward.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(Color(hex: "#8E939C"))
-                                .frame(width: 22, height: 22)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help("Previous / Replay")
-
-                        Button { manager.togglePlayPause() } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(Color(hex: manager.playerColor))
-                                    .frame(width: 26, height: 26)
-                                Image(systemName: manager.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(manager.player == "YouTube" ? .white : .black)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .help(manager.isPlaying ? "Pause" : "Play")
-
-                        Button { manager.nextTrack() } label: {
-                            Image(systemName: "forward.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(Color(hex: "#8E939C"))
-                                .frame(width: 22, height: 22)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help("Next / Skip")
-
-                        if !manager.player.isEmpty {
-                            Button { manager.openActiveMedia() } label: {
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 9.5, weight: .semibold))
-                                    .foregroundColor(Color(hex: "#8E939C"))
-                                    .frame(width: 22, height: 22)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .help(manager.player == "YouTube" ? "Switch to YouTube" : "Open \(manager.player)")
+                        if manager.isPlaying {
+                            AudioEqualizerBars(isPlaying: true, tintColor: Color(hex: manager.playerColor))
+                                .frame(width: 14, height: 10)
                         }
                     }
                 }
-                .padding(.top, 4)
+
+                Spacer(minLength: 4)
+
+                // 3. Playback Controls
+                HStack(spacing: 6) {
+                    Button {
+                        manager.previousTrack()
+                        SoundEngine.shared.play("blip")
+                    } label: {
+                        Image(systemName: "backward.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#8E939C"))
+                            .frame(width: 24, height: 24)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Previous / Replay")
+
+                    // Primary Play / Pause Button
+                    Button {
+                        manager.togglePlayPause()
+                        SoundEngine.shared.play(manager.isPlaying ? "tick" : "pop")
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color(hex: manager.playerColor), Color(hex: manager.playerColor).opacity(0.85)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .frame(width: 28, height: 28)
+                                .shadow(color: Color(hex: manager.playerColor).opacity(0.45), radius: 5, x: 0, y: 1.5)
+
+                            Image(systemName: manager.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(manager.player == "YouTube" ? .white : .black)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(manager.isPlaying ? "Pause" : "Play")
+
+                    Button {
+                        manager.nextTrack()
+                        SoundEngine.shared.play("blip")
+                    } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#8E939C"))
+                            .frame(width: 24, height: 24)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Next / Skip")
+
+                    if !manager.player.isEmpty {
+                        Button {
+                            manager.openActiveMedia()
+                            SoundEngine.shared.play("open")
+                        } label: {
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .foregroundColor(Color(hex: "#8E939C"))
+                                .frame(width: 22, height: 22)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(manager.player == "YouTube" ? "Switch to YouTube Tab" : "Open \(manager.player)")
+                    }
+                }
             }
+            .padding(.top, 2)
         }
         .padding(.leading, 106)
         .padding(.trailing, 14)

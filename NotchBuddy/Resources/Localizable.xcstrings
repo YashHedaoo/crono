@@ -123,10 +123,16 @@
     "−%@" : {
 
     },
+    "⏎" : {
+
+    },
     "★ %@" : {
 
     },
     "✕" : {
+
+    },
+    "$" : {
 
     },
     "Active pills" : {
@@ -4447,6 +4453,9 @@
     "English" : {
 
     },
+    "esc to deny" : {
+
+    },
     "Español" : {
 
     },
@@ -7804,6 +7813,9 @@
           }
         }
       }
+    },
+    "Needs Permission" : {
+
     },
     "New email" : {
       "localizations" : {
