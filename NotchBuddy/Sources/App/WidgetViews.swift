@@ -536,7 +536,7 @@ struct TimerCardView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 2)
             }
-            .padding(.leading, 108)
+            .padding(.leading, AppState.shared.mochiOnDesktop ? 16 : 108)
             .padding(.trailing, 16)
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -600,7 +600,7 @@ struct StopwatchCardView: View {
                 .padding(.top, 4)
             }
         }
-        .padding(.leading, 108)
+        .padding(.leading, AppState.shared.mochiOnDesktop ? 16 : 108)
         .padding(.trailing, 16)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1106,8 +1106,11 @@ struct RotatingVinylRecordView: View {
 struct NowPlayingCardView: View {
     let task: AgentTask
     @ObservedObject private var manager = NowPlayingManager.shared
+    @ObservedObject private var appState = AppState.shared
 
     var body: some View {
+        let isMochiFloating = appState.mochiOnDesktop
+
         VStack(alignment: .leading, spacing: 5) {
             WidgetCardHeader(
                 task: task,
@@ -1115,20 +1118,20 @@ struct NowPlayingCardView: View {
                 overrideSubtitle: manager.player.isEmpty ? "Media Player" : manager.player
             )
 
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: isMochiFloating ? 14 : 10) {
                 // 1. Spinning Vinyl Record / CD with Thumbnail in Center
                 RotatingVinylRecordView(
                     isPlaying: manager.isPlaying,
                     thumbnailUrl: manager.thumbnailUrl,
                     playerColor: manager.playerColor,
                     playerIcon: manager.playerIcon,
-                    discSize: 58
+                    discSize: isMochiFloating ? 64 : 56
                 )
 
                 // 2. Track / Video Title, Artist, and Source Badge
                 VStack(alignment: .leading, spacing: 2.5) {
                     Text(manager.title.isEmpty ? "Ready to Play" : manager.title)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: isMochiFloating ? 13 : 11.5, weight: .semibold))
                         .foregroundColor(Color(hex: "#F5F6F8"))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -1155,17 +1158,19 @@ struct NowPlayingCardView: View {
 
                                 Text(manager.sourceBrowser.isEmpty ? manager.player : "\(manager.player) • \(manager.sourceBrowser)")
                                     .font(.system(size: 8.5, weight: .semibold))
+                                    .lineLimit(1)
                             }
                             .foregroundColor(Color(hex: manager.playerColor))
-                            .padding(.horizontal, 4.5)
-                            .padding(.vertical, 1.5)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
                             .background(Color(hex: manager.playerColor).opacity(0.16))
                             .cornerRadius(3.5)
+                            .fixedSize()
                         }
 
                         if manager.isPlaying {
                             AudioEqualizerBars(isPlaying: true, tintColor: Color(hex: manager.playerColor))
-                                .frame(width: 14, height: 10)
+                                .fixedSize()
                         }
                     }
                 }
@@ -1173,7 +1178,7 @@ struct NowPlayingCardView: View {
                 Spacer(minLength: 4)
 
                 // 3. Playback Controls
-                HStack(spacing: 6) {
+                HStack(spacing: isMochiFloating ? 7 : 5) {
                     Button {
                         manager.previousTrack()
                         SoundEngine.shared.play("blip")
@@ -1202,11 +1207,11 @@ struct NowPlayingCardView: View {
                                         endPoint: .bottom
                                     )
                                 )
-                                .frame(width: 28, height: 28)
+                                .frame(width: isMochiFloating ? 30 : 28, height: isMochiFloating ? 30 : 28)
                                 .shadow(color: Color(hex: manager.playerColor).opacity(0.45), radius: 5, x: 0, y: 1.5)
 
                             Image(systemName: manager.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: isMochiFloating ? 12 : 11, weight: .bold))
                                 .foregroundColor(manager.player == "YouTube" ? .white : .black)
                         }
                     }
@@ -1246,7 +1251,7 @@ struct NowPlayingCardView: View {
             }
             .padding(.top, 2)
         }
-        .padding(.leading, 106)
+        .padding(.leading, isMochiFloating ? 16 : 106)
         .padding(.trailing, 14)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1262,18 +1267,18 @@ struct AudioEqualizerBars: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 0.12)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 2.5) {
+            HStack(alignment: .bottom, spacing: 2) {
                 ForEach(0..<4, id: \.self) { i in
                     let phase = Double(i) * 1.3
                     let heightFactor = isPlaying ? abs(sin(t * 5.0 + phase)) : 0.2
-                    let barH = CGFloat(6.0 + heightFactor * 16.0)
+                    let barH = CGFloat(3.0 + heightFactor * 8.0)
 
-                    RoundedRectangle(cornerRadius: 1.5)
+                    RoundedRectangle(cornerRadius: 1)
                         .fill(tintColor)
-                        .frame(width: 3, height: barH)
+                        .frame(width: 2.5, height: barH)
                 }
             }
-            .frame(height: 24)
+            .frame(width: 14, height: 12, alignment: .bottom)
         }
     }
 }
@@ -1372,7 +1377,7 @@ struct MacHealthCardView: View {
                 .cornerRadius(6)
             }
         }
-        .padding(.leading, 106)
+        .padding(.leading, AppState.shared.mochiOnDesktop ? 16 : 106)
         .padding(.trailing, 14)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

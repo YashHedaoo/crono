@@ -23,8 +23,9 @@ private enum MediaRemoteBridge {
     }
 
     static func togglePlayPause() {
-        _ = sendCommand(2) // kMRTogglePlayPause
-        postMediaKey(key: 16) // NX_KEYTYPE_PLAY
+        if !sendCommand(2) { // kMRTogglePlayPause
+            postMediaKey(key: 16) // NX_KEYTYPE_PLAY fallback
+        }
     }
 
     static func nextTrack() {
@@ -183,7 +184,11 @@ final class NowPlayingManager: ObservableObject {
                                 repeat with t in tabs of w
                                     set u to URL of t
                                     if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                        return "Safari|||" & name of t & "|||" & u
+                                        set playState to "unknown"
+                                        try
+                                            set playState to do JavaScript "var v = document.querySelector('video'); v ? (!v.paused ? 'playing' : 'paused') : 'unknown'" in t
+                                        end try
+                                        return "Safari|||" & name of t & "|||" & u & "|||" & playState
                                     end if
                                 end repeat
                             end repeat
@@ -199,7 +204,11 @@ final class NowPlayingManager: ObservableObject {
                                 repeat with t in tabs of w
                                     set u to URL of t
                                     if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                        return "\(b.name)|||" & title of t & "|||" & u
+                                        set playState to "unknown"
+                                        try
+                                            set playState to execute t javascript "var v = document.querySelector('video'); v ? (!v.paused ? 'playing' : 'paused') : 'unknown'"
+                                        end try
+                                        return "\(b.name)|||" & title of t & "|||" & u & "|||" & playState
                                     end if
                                 end repeat
                             end repeat
@@ -226,14 +235,18 @@ final class NowPlayingManager: ObservableObject {
                 let browser = parts[0]
                 let rawTitle = parts[1]
                 let url = parts[2]
+                let playState = parts.count >= 4 ? parts[3] : "unknown"
 
                 let parsed = Self.parseYouTubeTitle(rawTitle)
                 self.youtubeBrowser = browser
                 self.youtubeTitle = parsed.title
                 self.youtubeArtist = parsed.artist
                 self.youtubeUrl = url
-                if !self.youtubeIsPlaying && self.player != "Spotify" && self.player != "Apple Music" {
+
+                if playState == "playing" {
                     self.youtubeIsPlaying = true
+                } else if playState == "paused" {
+                    self.youtubeIsPlaying = false
                 }
             }
         } else {
@@ -394,13 +407,60 @@ final class NowPlayingManager: ObservableObject {
             """)
             isPlaying.toggle()
         } else if player == "YouTube" {
-            MediaRemoteBridge.togglePlayPause()
-            youtubeIsPlaying.toggle()
-            isPlaying = youtubeIsPlaying
+            toggleYouTubePlayback()
         } else {
             MediaRemoteBridge.togglePlayPause()
             isPlaying.toggle()
         }
+    }
+
+    private func toggleYouTubePlayback() {
+        let shouldPlay = !isPlaying
+        let scriptTarget = shouldPlay ? "play()" : "pause()"
+        let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
+
+        if browser == "Safari" {
+            executeAppleScript("""
+            tell application "Safari"
+                if (count of windows) > 0 then
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            set u to URL of t
+                            if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
+                                try
+                                    do JavaScript "var v = document.querySelector('video'); if (v) { v.\(scriptTarget); }" in t
+                                end try
+                                return
+                            end if
+                        end repeat
+                    end repeat
+                end if
+            end tell
+            """)
+        } else if !browser.isEmpty {
+            executeAppleScript("""
+            tell application "\(browser)"
+                if (count of windows) > 0 then
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            set u to URL of t
+                            if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
+                                try
+                                    execute t javascript "var v = document.querySelector('video'); if (v) { v.\(scriptTarget); }"
+                                end try
+                                return
+                            end if
+                        end repeat
+                    end repeat
+                end if
+            end tell
+            """)
+        } else {
+            MediaRemoteBridge.togglePlayPause()
+        }
+
+        self.youtubeIsPlaying = shouldPlay
+        self.isPlaying = shouldPlay
     }
 
     func nextTrack() {
@@ -417,7 +477,45 @@ final class NowPlayingManager: ObservableObject {
             end if
             """)
         } else if player == "YouTube" {
-            MediaRemoteBridge.nextTrack()
+            let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
+            let js = "var btn = document.querySelector('.ytp-next-button'); if (btn) { btn.click(); } else { var v = document.querySelector('video'); if (v) v.currentTime += 10; }"
+            if browser == "Safari" {
+                executeAppleScript("""
+                tell application "Safari"
+                    if (count of windows) > 0 then
+                        repeat with w in windows
+                            repeat with t in tabs of w
+                                if URL of t contains "youtube.com" then
+                                    try
+                                        do JavaScript "\(js)" in t
+                                    end try
+                                    return
+                                end if
+                            end repeat
+                        end repeat
+                    end if
+                end tell
+                """)
+            } else if !browser.isEmpty {
+                executeAppleScript("""
+                tell application "\(browser)"
+                    if (count of windows) > 0 then
+                        repeat with w in windows
+                            repeat with t in tabs of w
+                                if URL of t contains "youtube.com" then
+                                    try
+                                        execute t javascript "\(js)"
+                                    end try
+                                    return
+                                end if
+                            end repeat
+                        end repeat
+                    end if
+                end tell
+                """)
+            } else {
+                MediaRemoteBridge.nextTrack()
+            }
         } else {
             MediaRemoteBridge.nextTrack()
         }
@@ -437,7 +535,45 @@ final class NowPlayingManager: ObservableObject {
             end if
             """)
         } else if player == "YouTube" {
-            MediaRemoteBridge.previousTrack()
+            let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
+            let js = "var v = document.querySelector('video'); if (v) { if (v.currentTime > 3) { v.currentTime = 0; } else { var btn = document.querySelector('.ytp-prev-button'); if (btn) btn.click(); else v.currentTime = 0; } }"
+            if browser == "Safari" {
+                executeAppleScript("""
+                tell application "Safari"
+                    if (count of windows) > 0 then
+                        repeat with w in windows
+                            repeat with t in tabs of w
+                                if URL of t contains "youtube.com" then
+                                    try
+                                        do JavaScript "\(js)" in t
+                                    end try
+                                    return
+                                end if
+                            end repeat
+                        end repeat
+                    end if
+                end tell
+                """)
+            } else if !browser.isEmpty {
+                executeAppleScript("""
+                tell application "\(browser)"
+                    if (count of windows) > 0 then
+                        repeat with w in windows
+                            repeat with t in tabs of w
+                                if URL of t contains "youtube.com" then
+                                    try
+                                        execute t javascript "\(js)"
+                                    end try
+                                    return
+                                end if
+                            end repeat
+                        end repeat
+                    end if
+                end tell
+                """)
+            } else {
+                MediaRemoteBridge.previousTrack()
+            }
         } else {
             MediaRemoteBridge.previousTrack()
         }
