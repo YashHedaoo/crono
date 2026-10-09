@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrono - Desktop Mochi In-Place Input Designs</title>
+    <style>
+        :root {
+            --bg-dark: #0A0B0E;
+            --card-bg: rgba(18, 20, 26, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.10);
+            --accent-cyan: #38BDF8;
+            --accent-purple: #A855F7;
+            --accent-green: #10B981;
+            --accent-amber: #F59E0B;
+            --accent-red: #EF4444;
+            --text-main: #F5F6F8;
+            --text-sub: #8E939C;
+            --text-muted: #5F646D;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+        }
+
+        body {
+            background: var(--bg-dark);
+            color: var(--text-main);
+            padding: 40px 24px;
+            background-image: 
+                radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 80% 60%, rgba(168, 85, 247, 0.08) 0%, transparent 40%);
+            min-height: 100vh;
+        }
+
+        .header {
+            max-width: 1000px;
+            margin: 0 auto 40px auto;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #FFF 0%, #A5B4FC 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-sub);
+            font-size: 16px;
+            max-width: 650px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 28px;
+        }
+
+        .concept-card {
+            background: rgba(22, 25, 34, 0.65);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            backdrop-filter: blur(24px);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .concept-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .badge-tag {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            margin-bottom: 14px;
+            width: fit-content;
+        }
+
+        .tag-1 { background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); }
+        .tag-2 { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
+        .tag-3 { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+
+        .concept-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .concept-desc {
+            font-size: 13.5px;
+            color: var(--text-sub);
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        /* Mockup Scene */
+        .scene {
+            background: #0D0F14;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            height: 290px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 16px 16px;
+        }
+
+        /* Desktop Mochi Simulation */
+        .mochi-pet {
+            position: absolute;
+            width: 72px;
+            height: 72px;
+            background: #FFFFFF;
+            border-radius: 50% 50% 46% 46%;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), inset 0 -4px 8px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .mochi-eyes {
+            display: flex;
+            gap: 16px;
+            margin-top: 6px;
+        }
+
+        .mochi-eye {
+            width: 7px;
+            height: 10px;
+            background: #111;
+            border-radius: 5px;
+        }
+
+        .mochi-blush {
+            position: absolute;
+            width: 10px;
+            height: 6px;
+            background: rgba(244, 114, 182, 0.45);
+            border-radius: 50%;
+            top: 42px;
+        }
+        .blush-l { left: 10px; }
+        .blush-r { right: 10px; }
+
+        /* Bubble Style (Concept 1) */
+        .bubble-popup {
+            position: absolute;
+            bottom: 110px;
+            width: 270px;
+            background: rgba(18, 20, 26, 0.94);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+            z-index: 20;
+            animation: floatBob 3s ease-in-out infinite;
+        }
+
+        .bubble-tail {
+            position: absolute;
+            bottom: -7px;
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 14px;
+            height: 14px;
+            background: rgba(18, 20, 26, 0.94);
+            border-right: 1px solid rgba(255, 255, 255, 0.12);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        /* Side Dock Style (Concept 2) */
+        .side-dock-popup {
+            position: absolute;
+            left: 115px;
+            width: 215px;
+            background: rgba(16, 18, 24, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+            z-index: 20;
+        }
+
+        .connector-wire {
+            position: absolute;
+            left: 80px;
+            width: 36px;
+            height: 2px;
+            background: linear-gradient(90deg, #38BDF8, rgba(56, 189, 248, 0.2));
+            z-index: 15;
+        }
+
+        /* Radial HUD Style (Concept 3) */
+        .radial-hud-popup {
+            position: absolute;
+            top: 25px;
+            width: 280px;
+            background: rgba(15, 17, 23, 0.92);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.25), 0 12px 30px rgba(0,0,0,0.6);
+            border-radius: 14px;
+            padding: 14px;
+            z-index: 20;
+        }
+
+        /* Popup Inner Content */
+        .popup-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .popup-tag {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #C5C8CD;
+        }
+
+        .popup-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-amber);
+            box-shadow: 0 0 8px var(--accent-amber);
+        }
+
+        .code-box {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-family: "SF Mono", Menlo, monospace;
+            font-size: 10.5px;
+            color: #C5C8CD;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 10px;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 6px 10px;
+            border-radius: 7px;
+            font-size: 11px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s ease;
+        }
+
+        .btn-deny {
+            background: rgba(255, 255, 255, 0.08);
+            color: #8E939C;
+        }
+
+        .btn-allow {
+            background: #FFFFFF;
+            color: #0A0B0E;
+        }
+
+        .btn-always {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .specs {
+            margin-top: 18px;
+            list-style: none;
+        }
+
+        .specs li {
+            font-size: 12.5px;
+            color: var(--text-sub);
+            padding: 4px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .specs li::before {
+            content: "✓";
+            color: var(--accent-cyan);
+            font-weight: bold;
+        }
+
+        @keyframes floatBob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Mochi Desktop In-Place Input Proposals</h1>
+        <p>Instead of flying all the way up to the MacBook notch for every terminal command or permission prompt, Mochi stays right at his position on your screen and presents his prompt locally.</p>
+    </div>
+
+    <div class="container">
+
+        <!-- CONCEPT 1 -->
+        <div class="concept-card">
+            <span class="badge-tag tag-1">Concept 1 • Natural Pet</span>
+            <h2 class="concept-title">Floating Speech Bubble</h2>
+            <p class="concept-desc">Mochi acts as an expressive companion. A frosted bubble hovers directly above his head with an arrow pointing to him. He holds up his wizard staff and looks up at the card.</p>
+
+            <div class="scene">
+                <!-- Bubble -->
+                <div class="bubble-popup">
+                    <div class="popup-header">
+                        <div class="popup-tag">
+                            <span class="popup-dot"></span>
+                            <span>Claude Code • Permission</span>
+                        </div>
+                        <span style="font-size: 10px; color: #5F646D;">ESC / ⏎</span>
+                    </div>
+                    <div class="code-box">ls /Users/yashhedaoo/Desktop/Video/</div>
+                    <div class="btn-row">
+                        <button class="btn btn-deny">Deny</button>
+                        <button class="btn btn-allow">Allow</button>
+                        <button class="btn btn-always">Always</button>
+                    </div>
+                    <div class="bubble-tail"></div>
+                </div>
+
+                <!-- Mochi -->
+                <div class="mochi-pet" style="bottom: 25px;">
+                    <div class="mochi-eyes">
+                        <div class="mochi-eye" style="transform: translateY(-2px);"></div>
+                        <div class="mochi-eye" style="transform: translateY(-2px);"></div>
+                    </div>
+                    <div class="mochi-blush blush-l"></div>
+                    <div class="mochi-blush blush-r"></div>
+                </div>
+            </div>
+
+            <ul class="specs">
+                <li>Zero travel time — Mochi never leaves your active window area</li>
+                <li>Smart edge clamping: flips below Mochi if near screen top</li>
+                <li>Press <b>Enter</b> to Allow, <b>Esc</b> to Deny, <b>Space</b> for Always</li>
+                <li>Pops away with joyful celebration particles on approval</li>
+            </ul>
+        </div>
+
+        <!-- CONCEPT 2 -->
+        <div class="concept-card">
+            <span class="badge-tag tag-2">Concept 2 • Minimalist HUD</span>
+            <h2 class="concept-title">Side-Dock Drawer</h2>
+            <p class="concept-desc">A horizontal card slides out from Mochi's side (left or right depending on screen boundaries). Keeps vertical screen space completely free for reading code.</p>
+
+            <div class="scene">
+                <!-- Connector wire -->
+                <div class="connector-wire"></div>
+
+                <!-- Mochi -->
+                <div class="mochi-pet" style="left: 20px;">
+                    <div class="mochi-eyes">
+                        <div class="mochi-eye" style="transform: translateX(2px);"></div>
+                        <div class="mochi-eye" style="transform: translateX(2px);"></div>
+                    </div>
+                    <div class="mochi-blush blush-l"></div>
+                    <div class="mochi-blush blush-r"></div>
+                </div>
+
+                <!-- Side card -->
+                <div class="side-dock-popup">
+                    <div class="popup-header">
+                        <div class="popup-tag">
+                            <span class="popup-dot"></span>
+                            <span>Permission</span>
+                        </div>
+                    </div>
+                    <div class="code-box">mkdir -p /Desktop/Video</div>
+                    <div class="btn-row">
+                        <button class="btn btn-deny">Deny</button>
+                        <button class="btn btn-allow">Allow</button>
+                    </div>
+                </div>
+            </div>
+
+            <ul class="specs">
+                <li>Leaves vertical lines of code unobscured</li>
+                <li>Smooth horizontal spring animation from Mochi's flank</li>
+                <li>Mochi turns his head towards the card to guide user focus</li>
+                <li>Ultra-compact footprint (215px wide)</li>
+            </ul>
+        </div>
+
+        <!-- CONCEPT 3 -->
+        <div class="concept-card">
+            <span class="badge-tag tag-3">Concept 3 • Magic Projection</span>
+            <h2 class="concept-title">Arcane Rune Projection</h2>
+            <p class="concept-desc">Mochi raises his crystal gem staff. A luminous cyan/purple holographic glass HUD projects into the air above him with an animated magic ring and quick-choice buttons.</p>
+
+            <div class="scene">
+                <!-- Projected Card -->
+                <div class="radial-hud-popup">
+                    <div class="popup-header">
+                        <div class="popup-tag" style="color: #A855F7;">
+                            <span class="popup-dot" style="background: #A855F7; box-shadow: 0 0 8px #A855F7;"></span>
+                            <span>Agent Question</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 11.5px; color: #FFF; margin-bottom: 8px;">Which option should we build?</p>
+                    <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px;">
+                        <div style="background: rgba(255,255,255,0.06); padding: 5px 8px; border-radius: 6px; font-size: 10.5px; color: #DDD;">1. Option A (Recommended)</div>
+                        <div style="background: rgba(255,255,255,0.03); padding: 5px 8px; border-radius: 6px; font-size: 10.5px; color: #888;">2. Option B</div>
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn btn-allow" style="background: #A855F7; color: #FFF;">Submit</button>
+                    </div>
+                </div>
+
+                <!-- Mochi -->
+                <div class="mochi-pet" style="bottom: 15px;">
+                    <div class="mochi-eyes">
+                        <div class="mochi-eye"></div>
+                        <div class="mochi-eye"></div>
+                    </div>
+                    <div class="mochi-blush blush-l"></div>
+                    <div class="mochi-blush blush-r"></div>
+                </div>
+            </div>
+
+            <ul class="specs">
+                <li>Supports both tool permissions and multi-choice agent questions</li>
+                <li>Crystal staff surges with matching colored aura</li>
+                <li>Numbered hotkeys (Press 1 or 2 to select option)</li>
+                <li>Vibrant neon glass aesthetic</li>
+            </ul>
+        </div>
+
+    </div>
+
+</body>
+</html>

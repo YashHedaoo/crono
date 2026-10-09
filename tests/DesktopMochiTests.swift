@@ -8,6 +8,7 @@ enum DesktopMochiTests {
         testLookOrigin()
         testClampOrigin()
         testShouldRetractOnLanding()
+        testSideDockPlacement()
         print("DesktopMochiLogic: all cases passed")
     }
 
@@ -149,4 +150,63 @@ enum DesktopMochiTests {
         let high = DesktopMochiLogic.clampOrigin(CGPoint(x: 400, y: 2000), panelSize: s, visibleFrame: vf, margin: m)
         precondition(high.y == vf.maxY - s - m, "too-high must clamp to maxY - panelSize - margin")
     }
+
+    // MARK: - sideDockPlacement
+
+    static func testSideDockPlacement() {
+        let vf = CGRect(x: 0, y: 23, width: 1440, height: 877)
+        let cardSize = CGSize(width: 340, height: 150)
+
+        // Case 1: Mochi in center-left -> plenty of room on right
+        let mochi1 = CGRect(x: 200, y: 300, width: 120, height: 120)
+        let placement1 = DesktopMochiLogic.sideDockPlacement(
+            mochiFrame: mochi1,
+            cardSize: cardSize,
+            visibleFrame: vf,
+            spacing: 12,
+            margin: 16
+        )
+        precondition(placement1.isRightSide == true, "should dock on right side when room is available")
+        precondition(placement1.origin.x == 200 + 120 + 12, "x should be mochiFrame.maxX + spacing")
+        // midY = 300 + 60 = 360; y = 360 - 75 = 285
+        precondition(placement1.origin.y == 285, "y should center vertically with Mochi")
+
+        // Case 2: Mochi near right edge -> must dock on left side
+        let mochi2 = CGRect(x: 1300, y: 300, width: 120, height: 120)
+        let placement2 = DesktopMochiLogic.sideDockPlacement(
+            mochiFrame: mochi2,
+            cardSize: cardSize,
+            visibleFrame: vf,
+            spacing: 12,
+            margin: 16
+        )
+        precondition(placement2.isRightSide == false, "should dock on left side when right has no room")
+        precondition(placement2.origin.x == 1300 - 12 - 340, "x should be mochiFrame.minX - spacing - cardWidth")
+        precondition(placement2.origin.y == 285, "y should center vertically")
+
+        // Case 3: Mochi near top edge -> vertical clamping
+        let mochi3 = CGRect(x: 400, y: 820, width: 120, height: 120)
+        let placement3 = DesktopMochiLogic.sideDockPlacement(
+            mochiFrame: mochi3,
+            cardSize: cardSize,
+            visibleFrame: vf,
+            spacing: 12,
+            margin: 16
+        )
+        // midY = 880; targetY = 880 - 75 = 805; clamped to maxY(900) - 150 - 16 = 734
+        precondition(placement3.origin.y == vf.maxY - cardSize.height - 16, "y must be clamped to screen top margin")
+
+        // Case 4: Mochi near bottom edge -> vertical clamping
+        let mochi4 = CGRect(x: 400, y: 10, width: 120, height: 120)
+        let placement4 = DesktopMochiLogic.sideDockPlacement(
+            mochiFrame: mochi4,
+            cardSize: cardSize,
+            visibleFrame: vf,
+            spacing: 12,
+            margin: 16
+        )
+        // midY = 70; targetY = 70 - 75 = -5; clamped to minY(23) + 16 = 39
+        precondition(placement4.origin.y == vf.minY + 16, "y must be clamped to screen bottom margin")
+    }
 }
+

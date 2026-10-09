@@ -116,6 +116,11 @@ final class DesktopMochiController {
     private var viewState: DesktopBotViewState?
     private var frameTimer: Timer?
 
+    // Concept 2 side-dock alert panel
+    private var alertPanel: NSPanel?
+    private var alertKeyDownMonitor: Any?
+    private var alertIsRightSide: Bool = true
+
     // Alert state machine
     private var phase: DesktopPhase = .home
 
@@ -226,23 +231,14 @@ final class DesktopMochiController {
                 AppState.shared.mochiOnDesktop = true
                 UserDefaults.standard.set(true, forKey: DesktopMochiController.enabledKey)
                 self.persistPosition()
-                // Alert may have fired during the animation (observeAlerts skipped: phase wasn't .onDesktop)
+                self.startPolling()
+                self.addEventMonitors()
+                self.observeLifecycle()
                 let alertNow = AppState.shared.pendingApproval != nil || AppState.shared.pendingQuestion != nil
-                if DesktopMochiLogic.shouldRetractOnLanding(alertActive: alertNow) {
+                if alertNow {
+                    self.wakeUpIfNeeded()
                     self.engine?.triggerEmote(.surprised)
-                    self.phase = .retracting
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-                        guard let self else { return }
-                        switch self.phase {
-                        case .retracting:              self.retractForAlert()
-                        case .alertResolvedDuringRetract: self.phase = .home; self.launchFlyIfNeeded()
-                        default: break
-                        }
-                    }
-                } else {
-                    self.startPolling()
-                    self.addEventMonitors()
-                    self.observeLifecycle()
+                    self.showAlertPanel()
                 }
             }
         })
@@ -256,11 +252,6 @@ final class DesktopMochiController {
         guard UserDefaults.standard.bool(forKey: DesktopMochiController.enabledKey) else { return }
         guard phase == .home else { return }
         guard panel == nil else { return }
-        // Alert active: don't fly yet — park in .atNotchForAlert so observeAlerts restores us when it clears
-        if AppState.shared.pendingApproval != nil || AppState.shared.pendingQuestion != nil {
-            phase = .atNotchForAlert
-            return
-        }
 
         phase = .flyingOut
         let s = DesktopMochiController.panelSize
@@ -305,23 +296,14 @@ final class DesktopMochiController {
                 self.phase = .onDesktop
                 UserDefaults.standard.set(true, forKey: DesktopMochiController.enabledKey)
                 self.persistPosition()
-                // Alert may have fired during the flight (observeAlerts skipped: phase was .flyingOut)
+                self.startPolling()
+                self.addEventMonitors()
+                self.observeLifecycle()
                 let alertNow = AppState.shared.pendingApproval != nil || AppState.shared.pendingQuestion != nil
-                if DesktopMochiLogic.shouldRetractOnLanding(alertActive: alertNow) {
+                if alertNow {
+                    self.wakeUpIfNeeded()
                     self.engine?.triggerEmote(.surprised)
-                    self.phase = .retracting
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-                        guard let self else { return }
-                        switch self.phase {
-                        case .retracting:              self.retractForAlert()
-                        case .alertResolvedDuringRetract: self.phase = .home; self.launchFlyIfNeeded()
-                        default: break
-                        }
-                    }
-                } else {
-                    self.startPolling()
-                    self.addEventMonitors()
-                    self.observeLifecycle()
+                    self.showAlertPanel()
                 }
             }
         })
@@ -332,6 +314,7 @@ final class DesktopMochiController {
     /// Animate panel to notch then fully tear down.
     func flyHome() {
         guard let p = panel else { return }
+        closeAlertPanel(animated: false)
         phase = .home
         pendingSlapWorkItem?.cancel()
         stopPolling()
@@ -402,6 +385,7 @@ final class DesktopMochiController {
     }
 
     private func fullTearDown() {
+        closeAlertPanel(animated: false)
         phase = .home
         cancellables.removeAll()
         pendingSlapWorkItem?.cancel()
@@ -463,33 +447,13 @@ final class DesktopMochiController {
 
             if alertActive {
                 guard self.phase == .onDesktop else { return }
+                self.wakeUpIfNeeded()
                 self.engine?.triggerEmote(.surprised)
-                self.phase = .retracting
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-                    guard let self else { return }
-                    switch self.phase {
-                    case .retracting:
-                        self.retractForAlert()
-                    case .alertResolvedDuringRetract:
-                        // Alert cleared before animation started — no need to retract
-                        self.phase = .home
-                        self.launchFlyIfNeeded()
-                    default:
-                        break
-                    }
-                }
+                self.showAlertPanel()
             } else {
-                switch self.phase {
-                case .atNotchForAlert:
-                    self.phase = .home
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-                        self?.launchFlyIfNeeded()
-                    }
-                case .retracting:
-                    // Alert resolved while waiting to retract — mark it
-                    self.phase = .alertResolvedDuringRetract
-                default:
-                    break
+                if self.alertPanel != nil {
+                    self.closeAlertPanel(animated: true)
+                    self.engine?.triggerEmote(.happy, duration: 0.8, silent: true)
                 }
             }
         }
@@ -607,6 +571,9 @@ final class DesktopMochiController {
                     NSPoint(x: self.dragOriginAtStart.x + dx, y: self.dragOriginAtStart.y + dy))
                 p.setFrameOrigin(newOrigin)
                 self.viewState?.lookOrigin = self.lookOriginFor(panel: p)
+                if self.alertPanel != nil {
+                    self.updateAlertPanelPosition(animated: false)
+                }
             }
             return event
         }
@@ -691,6 +658,7 @@ final class DesktopMochiController {
     }
 
     private func removeEventMonitors() {
+        removeAlertKeyMonitor()
         if let m = mouseDownMonitor     { NSEvent.removeMonitor(m); mouseDownMonitor     = nil }
         if let m = mouseDraggedMonitor  { NSEvent.removeMonitor(m); mouseDraggedMonitor  = nil }
         if let m = mouseUpMonitor       { NSEvent.removeMonitor(m); mouseUpMonitor       = nil }
@@ -737,6 +705,165 @@ final class DesktopMochiController {
                 self?.screenSleeping = false
                 self?.viewState?.paused = false
             }
+        }
+    }
+
+    // MARK: - Side-dock Alert Panel (Concept 2: In-place Flank Drawer)
+
+    private func showAlertPanel() {
+        guard let p = panel else { return }
+        let isQuestion = AppState.shared.pendingQuestion != nil
+        let cardSize = CGSize(width: 352, height: isQuestion ? 188 : 148)
+        let screen = p.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let placement = DesktopMochiLogic.sideDockPlacement(
+            mochiFrame: p.frame,
+            cardSize: cardSize,
+            visibleFrame: screen.visibleFrame,
+            spacing: 12,
+            margin: 16
+        )
+        self.alertIsRightSide = placement.isRightSide
+
+        // Turn Mochi's gaze toward the card flank
+        if placement.isRightSide {
+            engine?.lookX = 0.8
+            engine?.lookY = 0.0
+        } else {
+            engine?.lookX = -0.8
+            engine?.lookY = 0.0
+        }
+
+        if let existing = alertPanel {
+            existing.setFrame(NSRect(origin: placement.origin, size: cardSize), display: true, animate: true)
+            return
+        }
+
+        let ap = NSPanel(
+            contentRect: NSRect(origin: placement.origin, size: cardSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        ap.backgroundColor = NSColor.clear
+        ap.isOpaque = false
+        ap.hasShadow = true
+        ap.level = .floating
+        ap.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        ap.ignoresMouseEvents = false
+
+        let sideDockView = DesktopSideDockAlertView(
+            appState: AppState.shared,
+            isRightSide: placement.isRightSide,
+            onClose: { [weak self] in
+                self?.closeAlertPanel(animated: true)
+            }
+        )
+        let hosting = NSHostingView(rootView: sideDockView)
+        hosting.frame = CGRect(origin: .zero, size: cardSize)
+        hosting.autoresizingMask = [.width, .height]
+        ap.contentView = hosting
+
+        // Start from horizontal offset adjacent to Mochi, slide into final docked origin
+        let slideOffset: CGFloat = placement.isRightSide ? -16 : 16
+        let startOrigin = NSPoint(x: placement.origin.x + slideOffset, y: placement.origin.y)
+        ap.setFrameOrigin(startOrigin)
+        ap.alphaValue = 0
+        ap.orderFront(self)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.25
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
+            ap.animator().setFrameOrigin(placement.origin)
+            ap.animator().alphaValue = 1.0
+        }
+
+        if isQuestion {
+            SoundEngine.shared.play("question")
+        } else {
+            SoundEngine.shared.play("approval")
+        }
+
+        self.alertPanel = ap
+        setupAlertKeyMonitor()
+    }
+
+    private func updateAlertPanelPosition(animated: Bool) {
+        guard let p = panel, let ap = alertPanel else { return }
+        let screen = p.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let placement = DesktopMochiLogic.sideDockPlacement(
+            mochiFrame: p.frame,
+            cardSize: ap.frame.size,
+            visibleFrame: screen.visibleFrame,
+            spacing: 12,
+            margin: 16
+        )
+        self.alertIsRightSide = placement.isRightSide
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.18
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                ap.animator().setFrameOrigin(placement.origin)
+            }
+        } else {
+            ap.setFrameOrigin(placement.origin)
+        }
+    }
+
+    private func closeAlertPanel(animated: Bool = true) {
+        guard let ap = alertPanel else { return }
+        removeAlertKeyMonitor()
+        alertPanel = nil
+
+        if !animated {
+            ap.close()
+            return
+        }
+
+        let slideOffset: CGFloat = alertIsRightSide ? -14 : 14
+        let targetOrigin = NSPoint(x: ap.frame.origin.x + slideOffset, y: ap.frame.origin.y)
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.18
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            ap.animator().setFrameOrigin(targetOrigin)
+            ap.animator().alphaValue = 0.0
+        }, completionHandler: {
+            Task { @MainActor in
+                ap.close()
+            }
+        })
+    }
+
+    private func setupAlertKeyMonitor() {
+        removeAlertKeyMonitor()
+        alertKeyDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.alertPanel != nil else { return event }
+            let s = AppState.shared
+            // 53 = Escape -> Deny or Reply in terminal
+            if event.keyCode == 53 {
+                if s.pendingApproval != nil {
+                    HookServer.shared.sendApprovalDecision("deny")
+                    return nil
+                } else if s.pendingQuestion != nil {
+                    HookServer.shared.sendQuestionAsk()
+                    return nil
+                }
+            }
+            // 36 = Return / Enter -> Allow
+            if event.keyCode == 36 {
+                if s.pendingApproval != nil {
+                    HookServer.shared.sendApprovalDecision("allow")
+                    return nil
+                }
+            }
+            return event
+        }
+    }
+
+    private func removeAlertKeyMonitor() {
+        if let m = alertKeyDownMonitor {
+            NSEvent.removeMonitor(m)
+            alertKeyDownMonitor = nil
         }
     }
 
@@ -788,3 +915,473 @@ final class DesktopMochiController {
         UserDefaults.standard.set(Double(o.y), forKey: DesktopMochiController.posYKey)
     }
 }
+
+// MARK: - Side-dock frosted glass background
+
+struct SideDockFrostedGlass: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = .hudWindow
+        v.blendingMode = .behindWindow
+        v.state = .active
+        v.isEmphasized = true
+        return v
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+// MARK: - Side-dock alert view (Concept 2: Horizontal Flank Drawer)
+
+struct DesktopSideDockAlertView: View {
+    @ObservedObject var appState: AppState
+    let isRightSide: Bool
+    let onClose: () -> Void
+
+    var isApproval: Bool { appState.pendingApproval != nil }
+    var isQuestion: Bool { appState.pendingQuestion != nil }
+
+    var body: some View {
+        ZStack {
+            // Frosted glass background
+            SideDockFrostedGlass()
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            // Deep obsidian backdrop wash
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(hex: "#0A0D12").opacity(0.88))
+
+            // Specular border
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.24), Color.white.opacity(0.06)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+
+            // Top ambient accent line
+            VStack {
+                HStack {
+                    if !isRightSide { Spacer() }
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(
+                            LinearGradient(
+                                colors: isApproval
+                                    ? [Color(hex: "#F59E0B"), Color(hex: "#D97706")]
+                                    : [Color(hex: "#22D3EE"), Color(hex: "#06B6D4")],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: 56, height: 3)
+                        .shadow(
+                            color: isApproval
+                                ? Color(hex: "#F59E0B").opacity(0.65)
+                                : Color(hex: "#22D3EE").opacity(0.65),
+                            radius: 5,
+                            x: 0,
+                            y: 1
+                        )
+                        .padding(.horizontal, 22)
+                    if isRightSide { Spacer() }
+                }
+                Spacer()
+            }
+
+            // Card content
+            if let approval = appState.pendingApproval {
+                DesktopApprovalCard(approval: approval, isRightSide: isRightSide, onClose: onClose)
+            } else if let question = appState.pendingQuestion {
+                DesktopQuestionCard(question: question, isRightSide: isRightSide, onClose: onClose)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Desktop Approval Card
+
+struct DesktopApprovalCard: View {
+    let approval: ApprovalInfo
+    let isRightSide: Bool
+    let onClose: () -> Void
+
+    var hideAlways: Bool {
+        approval.pillId == "agent_codex"
+            || approval.pillId == "agent_copilot"
+            || approval.pillId == "agent_muse"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "#F59E0B").opacity(0.18))
+                        .frame(width: 22, height: 22)
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(hex: "#F59E0B"))
+                }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Needs Permission")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color(hex: "#F5F6F8"))
+                    Text(approval.pillId == "agent_claude" ? "Claude Code" : "Terminal Agent")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(hex: "#8B949E"))
+                }
+
+                Spacer()
+
+                // Keyboard shortcut hint
+                Text("esc to deny")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(Color(hex: "#8B949E"))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2.5)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+
+            // Code command block
+            HStack(spacing: 6) {
+                Text("$")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "#F59E0B"))
+                let cmdText = !approval.command.isEmpty ? approval.command : (!approval.tool.isEmpty ? approval.tool : "…")
+                Text(cmdText)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(Color(hex: "#E6EDF3"))
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.black.opacity(0.48))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+
+            // Action buttons
+            HStack(spacing: 8) {
+                // Deny button
+                Button {
+                    HookServer.shared.sendApprovalDecision("deny")
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Deny")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(Color(hex: "#C9D1D9"))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                // Allow button
+                Button {
+                    HookServer.shared.sendApprovalDecision("allow")
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Allow")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("⏎")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .opacity(0.8)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(hex: "#D97706"), Color(hex: "#B45309")],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7)
+                            .stroke(Color(hex: "#F59E0B").opacity(0.6), lineWidth: 1)
+                    )
+                    .shadow(color: Color(hex: "#F59E0B").opacity(0.3), radius: 4, x: 0, y: 1)
+                }
+                .buttonStyle(.plain)
+
+                // Always button
+                if !hideAlways {
+                    Button {
+                        HookServer.shared.sendApprovalDecision("always")
+                    } label: {
+                        Text("Always")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(Color(hex: "#8B949E"))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Desktop Question Card
+
+struct DesktopQuestionCard: View {
+    let question: AskQuestion
+    let isRightSide: Bool
+    let onClose: () -> Void
+
+    @State private var questionIndex = 0
+    @State private var selections: [[String]] = []
+    @State private var otherTexts: [String] = []
+    @State private var showOther: [Bool] = []
+    @FocusState private var otherFieldFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !question.questions.isEmpty {
+                let qi = min(questionIndex, question.questions.count - 1)
+                let item = question.questions[qi]
+                let isLast = qi == question.questions.count - 1
+                let isMulti = item.multiSelect
+                let curSel = qi < selections.count ? selections[qi] : []
+                let curOther = qi < showOther.count ? showOther[qi] : false
+                let curOtherText = qi < otherTexts.count ? otherTexts[qi] : ""
+                let canProceed = !curSel.isEmpty || (curOther && !curOtherText.isEmpty)
+
+                // Header
+                HStack(spacing: 6) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: "#22D3EE").opacity(0.18))
+                            .frame(width: 20, height: 20)
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(Color(hex: "#22D3EE"))
+                    }
+
+                    Text("Claude Code is asking")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(hex: "#F5F6F8"))
+
+                    if question.questions.count > 1 {
+                        Text("\(qi + 1)/\(question.questions.count)")
+                            .font(.system(size: 10))
+                            .foregroundColor(Color(hex: "#6B7079"))
+                    }
+
+                    Spacer()
+
+                    Button("Reply in terminal") {
+                        HookServer.shared.sendQuestionAsk()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(hex: "#8B949E"))
+                    .underline()
+                }
+
+                // Question text
+                Text(item.question)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(hex: "#F5F6F8"))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Options or "Other…"
+                if curOther {
+                    HStack(spacing: 6) {
+                        TextField("Your answer…", text: Binding(
+                            get: { qi < otherTexts.count ? otherTexts[qi] : "" },
+                            set: { v in if qi < otherTexts.count { otherTexts[qi] = v } }
+                        ))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(hex: "#F5F6F8"))
+                        .focused($otherFieldFocused)
+                        .onAppear { otherFieldFocused = true }
+                        .onSubmit { commitOtherAndProceed(q: question, qi: qi, isLast: isLast) }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                        Button(isLast ? "Send" : "Next") {
+                            commitOtherAndProceed(q: question, qi: qi, isLast: isLast)
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(curOtherText.isEmpty ? Color(hex: "#6B7079") : Color(hex: "#F5F6F8"))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(curOtherText.isEmpty ? 0.05 : 0.16))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .disabled(curOtherText.isEmpty)
+
+                        Button {
+                            if qi < showOther.count { showOther[qi] = false }
+                        } label: {
+                            Text("✕")
+                                .font(.system(size: 9))
+                                .foregroundColor(Color(hex: "#8B949E"))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    ChipFlowLayout(spacing: 6) {
+                        ForEach(Array(item.options.enumerated()), id: \.offset) { idx, opt in
+                            let isSelected = curSel.contains(opt.label)
+                            Button {
+                                if isMulti {
+                                    toggleSelection(qi: qi, label: opt.label)
+                                } else {
+                                    selectAndProceed(q: question, qi: qi, label: opt.label, isLast: isLast)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text("\(idx + 1)")
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        .foregroundColor(isSelected ? Color(hex: "#22D3EE") : Color(hex: "#8B949E"))
+                                        .padding(.horizontal, 3.5)
+                                        .padding(.vertical, 1)
+                                        .background(Color.white.opacity(isSelected ? 0.15 : 0.06))
+                                        .clipShape(RoundedRectangle(cornerRadius: 3))
+
+                                    Text(opt.label)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(isSelected ? Color(hex: "#67E8F9") : Color(hex: "#E6EDF3"))
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(isSelected ? Color(hex: "#22D3EE").opacity(0.2) : Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(isSelected ? Color(hex: "#22D3EE").opacity(0.55) : Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button {
+                            if qi < showOther.count { showOther[qi] = true }
+                        } label: {
+                            Text("Other…")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color(hex: "#8B949E"))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if isMulti {
+                        HStack {
+                            Spacer()
+                            Button(isLast ? "Send" : "Next") {
+                                proceedFromQuestion(q: question, qi: qi, isLast: isLast)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Color.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color(hex: "#06B6D4"), Color(hex: "#0891B2")],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .disabled(!canProceed)
+                            .opacity(canProceed ? 1 : 0.4)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .onAppear { resetQuestionState() }
+        .onChange(of: question) { _, _ in resetQuestionState() }
+    }
+
+    private func resetQuestionState() {
+        questionIndex = 0
+        let count = question.questions.count
+        selections = Array(repeating: [], count: count)
+        otherTexts = Array(repeating: "", count: count)
+        showOther  = Array(repeating: false, count: count)
+    }
+
+    private func toggleSelection(qi: Int, label: String) {
+        guard qi < selections.count else { return }
+        if let i = selections[qi].firstIndex(of: label) {
+            selections[qi].remove(at: i)
+        } else {
+            selections[qi].append(label)
+        }
+    }
+
+    private func selectAndProceed(q: AskQuestion, qi: Int, label: String, isLast: Bool) {
+        guard qi < selections.count else { return }
+        selections[qi] = [label]
+        if isLast { sendAnswers(q: q) } else { withAnimation { questionIndex = qi + 1 } }
+    }
+
+    private func proceedFromQuestion(q: AskQuestion, qi: Int, isLast: Bool) {
+        if isLast { sendAnswers(q: q) } else { withAnimation { questionIndex = qi + 1 } }
+    }
+
+    private func commitOtherAndProceed(q: AskQuestion, qi: Int, isLast: Bool) {
+        let text = qi < otherTexts.count ? otherTexts[qi] : ""
+        guard !text.isEmpty else { return }
+        if qi < selections.count { selections[qi] = [text] }
+        if isLast {
+            sendAnswers(q: q)
+        } else {
+            if qi < showOther.count { showOther[qi] = false }
+            withAnimation { questionIndex = qi + 1 }
+        }
+    }
+
+    private func sendAnswers(q: AskQuestion) {
+        let answers = AskQuestion.buildAnswers(questions: q.questions, selections: selections)
+        HookServer.shared.sendQuestionAnswers(answers)
+    }
+}
+

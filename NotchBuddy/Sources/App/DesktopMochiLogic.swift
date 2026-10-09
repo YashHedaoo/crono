@@ -80,6 +80,54 @@ enum DesktopMochiLogic {
     /// Whether Mochi should immediately retract after landing (alert was active during the flight).
     static func shouldRetractOnLanding(alertActive: Bool) -> Bool { alertActive }
 
+    /// Result of computing side-dock card placement relative to Mochi.
+    struct SideDockPlacement: Equatable {
+        let origin: CGPoint
+        let isRightSide: Bool
+
+        init(origin: CGPoint, isRightSide: Bool) {
+            self.origin = origin
+            self.isRightSide = isRightSide
+        }
+    }
+
+    /// Calculates the origin and flank orientation (right or left) for the side-dock card
+    /// based on Mochi's current frame and the screen's visible frame.
+    static func sideDockPlacement(
+        mochiFrame: CGRect,
+        cardSize: CGSize,
+        visibleFrame: CGRect,
+        spacing: CGFloat = 12,
+        margin: CGFloat = 16
+    ) -> SideDockPlacement {
+        let spaceOnRight = visibleFrame.maxX - (mochiFrame.maxX + spacing)
+        let spaceOnLeft  = (mochiFrame.minX - spacing) - visibleFrame.minX
+
+        let fitsRight = spaceOnRight >= cardSize.width
+        let fitsLeft  = spaceOnLeft >= cardSize.width
+
+        let isRight: Bool
+        if fitsRight {
+            isRight = true
+        } else if fitsLeft {
+            isRight = false
+        } else {
+            isRight = spaceOnRight >= spaceOnLeft
+        }
+
+        let targetX: CGFloat
+        if isRight {
+            targetX = min(mochiFrame.maxX + spacing, visibleFrame.maxX - cardSize.width - margin)
+        } else {
+            targetX = max(mochiFrame.minX - spacing - cardSize.width, visibleFrame.minX + margin)
+        }
+
+        let targetY = mochiFrame.midY - (cardSize.height / 2)
+        let clampedY = min(max(targetY, visibleFrame.minY + margin), visibleFrame.maxY - cardSize.height - margin)
+
+        return SideDockPlacement(origin: CGPoint(x: targetX, y: clampedY), isRightSide: isRight)
+    }
+
     /// Clamp a panel origin so the panel stays inside `visibleFrame` with `margin` on each side.
     static func clampOrigin(_ origin:      CGPoint,
                              panelSize:    CGFloat,
