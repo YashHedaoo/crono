@@ -59,21 +59,16 @@ private enum MediaRemoteBridge {
     }
 
     static func play() {
-        if !sendCommand(0) { // kMRPlay = 0
-            postMediaKey(key: 16)
-        }
+        _ = sendCommand(2) // kMRTogglePlayPause = 2 (Chromium/Chrome responds to toggle)
+        _ = sendCommand(0) // kMRPlay = 0 (Standard media play)
     }
 
     static func pause() {
-        if !sendCommand(1) { // kMRPause = 1
-            postMediaKey(key: 16)
-        }
+        _ = sendCommand(1) // kMRPause = 1
     }
 
     static func togglePlayPause() {
-        if !sendCommand(2) { // kMRTogglePlayPause = 2
-            postMediaKey(key: 16)
-        }
+        _ = sendCommand(2) // kMRTogglePlayPause = 2
     }
 
     static func nextTrack() {
@@ -489,10 +484,64 @@ final class NowPlayingManager: ObservableObject {
                 isPlaying = false
                 youtubeIsPlaying = false
             } else {
+                let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
+                if player == "YouTube" && !browser.isEmpty {
+                    wakeUpBrowserTab(browser: browser)
+                }
+
                 MediaRemoteBridge.play()
                 isPlaying = true
                 youtubeIsPlaying = true
             }
+
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard let self else { return }
+                let sysPlaying = await MediaRemoteBridge.isApplicationPlaying()
+                if self.player == "YouTube" {
+                    self.youtubeIsPlaying = sysPlaying
+                    self.isPlaying = sysPlaying
+                }
+            }
+        }
+    }
+
+    private func wakeUpBrowserTab(browser: String) {
+        guard !youtubeUrl.isEmpty else { return }
+        if browser == "Google Chrome" || browser == "Brave Browser" || browser == "Microsoft Edge" || browser == "Arc" || browser == "Opera" || browser == "Vivaldi" {
+            executeAppleScript("""
+            tell application "\(browser)"
+                if (count of windows) > 0 then
+                    repeat with w in windows
+                        set tabIdx to 1
+                        repeat with t in tabs of w
+                            if URL of t contains "youtube.com" then
+                                set active tab index of w to tabIdx
+                                exit repeat
+                            end if
+                            set tabIdx to tabIdx + 1
+                        end repeat
+                    end repeat
+                end if
+            end tell
+            """)
+        } else if browser == "Safari" {
+            executeAppleScript("""
+            tell application "Safari"
+                if (count of windows) > 0 then
+                    repeat with w in windows
+                        set tabIdx to 1
+                        repeat with t in tabs of w
+                            if URL of t contains "youtube.com" then
+                                set current tab of w to t
+                                exit repeat
+                            end if
+                            set tabIdx to tabIdx + 1
+                        end repeat
+                    end repeat
+                end if
+            end tell
+            """)
         }
     }
 
