@@ -81,7 +81,7 @@ private enum MediaRemoteBridge {
     }
 
     static func play(bundleId: String? = nil) {
-        _ = sendCommand(2, bundleId: bundleId) // kMRTogglePlayPause = 2
+        _ = sendCommand(2, bundleId: bundleId) // kMRTogglePlayPause = 2 (browsers don't handle kMRPlay=0)
     }
 
     static func pause(bundleId: String? = nil) {
@@ -160,6 +160,8 @@ final class NowPlayingManager: ObservableObject {
     private var youtubeIsPlaying = false
 
     private var scanTask: Task<Void, Never>?
+    private var commandCooldownUntil: Date = .distantPast
+    private var lastYouTubeTabSeenAt: Date = .distantPast
 
     private init() {
         setupObservers()
@@ -218,8 +220,12 @@ final class NowPlayingManager: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard Date() >= self.commandCooldownUntil else { return }
                 let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
-                if self.player == "YouTube" || (!self.spotifyIsPlaying && !self.musicIsPlaying) {
+                // Re-check: a command may have been issued during the async call above.
+                guard Date() >= self.commandCooldownUntil else { return }
+                // YouTube play state is driven by DOM — MediaRemote not reliable for browsers
+                if self.player != "YouTube" && !self.spotifyIsPlaying && !self.musicIsPlaying {
                     if self.youtubeIsPlaying != isSystemPlaying || self.isPlaying != isSystemPlaying {
                         self.youtubeIsPlaying = isSystemPlaying
                         self.isPlaying = isSystemPlaying
@@ -247,14 +253,15 @@ final class NowPlayingManager: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 350_000_000) // 0.35s responsive loop
                 guard let self else { break }
-                let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
-                if self.player == "YouTube" {
-                    if self.youtubeIsPlaying != isSystemPlaying {
-                        self.youtubeIsPlaying = isSystemPlaying
-                        self.isPlaying = isSystemPlaying
+                if Date() >= self.commandCooldownUntil {
+                    let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
+                    // Re-check after await — a togglePlayPause() may have fired during the call.
+                    if Date() >= self.commandCooldownUntil {
+                        // YouTube play state is driven by DOM query in scanForYouTubePlayback — skip here
+                        if !self.player.isEmpty && self.player != "Spotify" && self.player != "Apple Music" && self.player != "YouTube" {
+                            self.isPlaying = isSystemPlaying
+                        }
                     }
-                } else if !self.player.isEmpty && self.player != "Spotify" && self.player != "Apple Music" {
-                    self.isPlaying = isSystemPlaying
                 }
                 await self.scanForYouTubePlayback()
             }
@@ -287,7 +294,12 @@ final class NowPlayingManager: ObservableObject {
                                 repeat with t in tabs of w
                                     set u to URL of t
                                     if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                        return "Safari|||" & name of t & "|||" & u
+                                        try
+                                            set isPaused to do JavaScript "document.querySelector('video')?.paused?.toString() ?? 'unknown'" in t
+                                        on error
+                                            set isPaused to "unknown"
+                                        end try
+                                        return "Safari|||" & name of t & "|||" & u & "|||" & isPaused
                                     end if
                                 end repeat
                             end repeat
@@ -303,7 +315,12 @@ final class NowPlayingManager: ObservableObject {
                                 repeat with t in tabs of w
                                     set u to URL of t
                                     if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                        return "\(b.name)|||" & title of t & "|||" & u
+                                        try
+                                            set isPaused to execute t javascript "document.querySelector('video')?.paused?.toString() ?? 'unknown'"
+                                        on error
+                                            set isPaused to "unknown"
+                                        end try
+                                        return "\(b.name)|||" & title of t & "|||" & u & "|||" & isPaused
                                     end if
                                 end repeat
                             end repeat
@@ -336,13 +353,43 @@ final class NowPlayingManager: ObservableObject {
                 self.youtubeTitle = parsed.title
                 self.youtubeArtist = parsed.artist
                 self.youtubeUrl = url
+                self.lastYouTubeTabSeenAt = Date()
 
-                let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
-                self.youtubeIsPlaying = isSystemPlaying
-                self.isPlaying = isSystemPlaying
+                if Date() >= self.commandCooldownUntil {
+                    // "false" = video.paused is false = playing; "true" = paused
+                    let domPausedRaw = parts.count >= 4 ? parts[3].trimmingCharacters(in: .whitespacesAndNewlines) : "unknown"
+                    let domIsPlaying: Bool? = domPausedRaw == "false" ? true : (domPausedRaw == "true" ? false : nil)
+
+                    if let isPlaying = domIsPlaying {
+                        // DOM ground truth — no MediaRemote call needed
+                        if self.youtubeIsPlaying != isPlaying {
+                            self.youtubeIsPlaying = isPlaying
+                            self.isPlaying = isPlaying
+                        }
+                    } else {
+                        // JavaScript unavailable — fall back to MediaRemote
+                        let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
+                        if Date() >= self.commandCooldownUntil {
+                            self.youtubeIsPlaying = isSystemPlaying
+                            self.isPlaying = isSystemPlaying
+                        }
+                    }
+                }
             }
         } else {
-            // No YouTube video tab open
+            // No YouTube tab found — skip during cooldown or if the tab was seen recently.
+            // Chrome can briefly fail to respond to AppleScript while processing a MediaRemote
+            // command, causing a transient "gone" read that would wrongly clear play state.
+            guard Date() >= commandCooldownUntil else {
+                recomputeActivePlayer()
+                return
+            }
+            // Require the tab to be gone for at least 1.5s before clearing state, so a single
+            // failed AppleScript scan right after a play command doesn't reset the UI.
+            guard Date().timeIntervalSince(lastYouTubeTabSeenAt) > 1.5 else {
+                recomputeActivePlayer()
+                return
+            }
             self.youtubeTitle = ""
             self.youtubeArtist = ""
             self.youtubeUrl = ""
@@ -438,6 +485,10 @@ final class NowPlayingManager: ObservableObject {
             return
         }
 
+        // Don't reset to idle/paused while a playback command is in flight — the scan
+        // may have transiently lost the YouTube tab while Chrome processed the command.
+        if Date() < commandCooldownUntil { return }
+
         // Priority 4: Paused Spotify if recently active
         if !spotifyTitle.isEmpty {
             player = "Spotify"
@@ -520,6 +571,9 @@ final class NowPlayingManager: ObservableObject {
             isPlaying.toggle()
         } else {
             // YouTube / Browser / System:
+            // Set cooldown before sending so the scanner doesn't undo the optimistic state
+            // while the browser is processing the command (~100-400ms latency).
+            commandCooldownUntil = Date().addingTimeInterval(1.5)
             if isPlaying {
                 MediaRemoteBridge.pause(bundleId: bundleId)
                 isPlaying = false
@@ -528,16 +582,6 @@ final class NowPlayingManager: ObservableObject {
                 MediaRemoteBridge.play(bundleId: bundleId)
                 isPlaying = true
                 youtubeIsPlaying = true
-            }
-
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                guard let self else { return }
-                let sysPlaying = await MediaRemoteBridge.isApplicationPlaying()
-                if self.player == "YouTube" {
-                    self.youtubeIsPlaying = sysPlaying
-                    self.isPlaying = sysPlaying
-                }
             }
         }
     }

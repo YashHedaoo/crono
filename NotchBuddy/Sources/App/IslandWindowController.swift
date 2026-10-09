@@ -685,8 +685,10 @@ final class IslandWindowController: NSWindowController {
         // Hook server expand requests (alerts only)
         NotificationCenter.default.addObserver(forName: .hookExpand, object: nil, queue: .main) { [weak self] note in
             guard let self, let view = note.object as? IslandView else { return }
-            // If Mochi is on desktop, alerts are presented in-place by DesktopMochiController
-            guard !self.state.mochiOnDesktop else { return }
+            // If Mochi is on desktop with an active panel, alerts are presented in-place
+            if self.state.mochiOnDesktop && DesktopMochiController.shared.canPresentInPlaceAlert {
+                return
+            }
             self.fsm.openedExternally()
             self.expand(to: view)
         }

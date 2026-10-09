@@ -102,6 +102,12 @@ struct DesktopBotView: View {
 /// - **Alert**: `pendingApproval`/`pendingQuestion` goes non-nil → surprised emote →
 ///   `retractForAlert()` (panel gone, flag stays true) → both nil → `launchFlyIfNeeded()`.
 /// - **User flies home**: double-click → `flyHome()` → full teardown.
+/// Borderless panel that can become key to receive keyboard input (for text fields and shortcuts)
+final class DesktopAlertPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 @MainActor
 final class DesktopMochiController {
     static let shared = DesktopMochiController()
@@ -109,6 +115,10 @@ final class DesktopMochiController {
         observeScreenSleep()
         observeScreenLock()
         observeAlerts()   // permanent — lives for the lifetime of the singleton
+    }
+
+    var canPresentInPlaceAlert: Bool {
+        panel != nil && (phase == .onDesktop || phase == .flyingOut)
     }
 
     private var panel: NSPanel?
@@ -444,15 +454,16 @@ final class DesktopMochiController {
             AppState.shared.$pendingApproval,
             AppState.shared.$pendingQuestion
         )
-        .map { a, q in a != nil || q != nil }
+        .map { (a: ApprovalInfo?, q: AskQuestion?) -> Bool in
+            a != nil || q != nil
+        }
         .removeDuplicates()
-        .dropFirst()
         .receive(on: DispatchQueue.main)
-        .sink { [weak self] alertActive in
+        .sink { [weak self] (alertActive: Bool) in
             guard let self else { return }
 
             if alertActive {
-                guard self.phase == .onDesktop else { return }
+                guard self.panel != nil && (self.phase == .onDesktop || self.phase == .flyingOut) else { return }
                 self.wakeUpIfNeeded()
                 self.engine?.triggerEmote(.surprised)
                 self.showAlertPanel()
@@ -720,7 +731,7 @@ final class DesktopMochiController {
     private func showAlertPanel() {
         guard let p = panel else { return }
         let isQuestion = AppState.shared.pendingQuestion != nil
-        let cardSize = CGSize(width: 352, height: isQuestion ? 188 : 148)
+        let cardSize = CGSize(width: 352, height: isQuestion ? 216 : 148)
         let screen = p.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let placement = DesktopMochiLogic.sideDockPlacement(
             mochiFrame: p.frame,
@@ -742,10 +753,11 @@ final class DesktopMochiController {
 
         if let existing = alertPanel {
             existing.setFrame(NSRect(origin: placement.origin, size: cardSize), display: true, animate: true)
+            existing.orderFront(nil)
             return
         }
 
-        let ap = NSPanel(
+        let ap = DesktopAlertPanel(
             contentRect: NSRect(origin: placement.origin, size: cardSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -754,7 +766,7 @@ final class DesktopMochiController {
         ap.backgroundColor = NSColor.clear
         ap.isOpaque = false
         ap.hasShadow = true
-        ap.level = .floating
+        ap.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 3)
         ap.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         ap.ignoresMouseEvents = false
 
@@ -860,6 +872,25 @@ final class DesktopMochiController {
             if event.keyCode == 36 {
                 if s.pendingApproval != nil {
                     HookServer.shared.sendApprovalDecision("allow")
+                    return nil
+                }
+            }
+            // 49 = Space -> Always
+            if event.keyCode == 49 {
+                if s.pendingApproval != nil {
+                    HookServer.shared.sendApprovalDecision("always")
+                    return nil
+                }
+            }
+            // 18, 19, 20, 21 = Keys 1, 2, 3, 4 -> Quick choose question option
+            if let question = s.pendingQuestion, !question.questions.isEmpty {
+                let keyIndexMap: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3]
+                if let optIdx = keyIndexMap[event.keyCode],
+                   let curItem = question.questions.first,
+                   optIdx < curItem.options.count {
+                    let label = curItem.options[optIdx].label
+                    let answers = AskQuestion.buildAnswers(questions: question.questions, selections: [[label]])
+                    HookServer.shared.sendQuestionAnswers(answers)
                     return nil
                 }
             }
@@ -1040,7 +1071,7 @@ struct DesktopApprovalCard: View {
                     Text("Needs Permission")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(Color(hex: "#F5F6F8"))
-                    Text(approval.pillId == "agent_claude" ? "Claude Code" : "Terminal Agent")
+                    Text((approval.pillId == "agent_claude" || approval.pillId == "integration_claude") ? "Claude Code" : "Terminal Agent")
                         .font(.system(size: 10))
                         .foregroundColor(Color(hex: "#8B949E"))
                 }

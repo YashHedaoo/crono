@@ -384,12 +384,10 @@ final class HookServer: @unchecked Sendable {
         } else if isCursorEditor {
             agentId = "agent_cursor"
             isExternalAgent = false
-        } else if isVSCodeEditor {
+        } else {
+            // Claude Code from VS Code, Cursor, Antigravity IDE, Terminal, iTerm2, or any shell
             agentId = "integration_claude"
             isExternalAgent = false
-        } else {
-            nbLog("Ignored \(name) from \(termProgram.isEmpty ? bundleId : termProgram) (\(projectName))")
-            return
         }
 
         let focused = state.focusId == agentId
@@ -710,7 +708,8 @@ final class HookServer: @unchecked Sendable {
         } else {
             pillId = "integration_claude"
         }
-        guard isCodexRequest || isCopilotRequest || isMuseRequest || isHermesRequest || isCursorEditor || isVSCodeEditor else {
+        // Supported agents for in-app approval cards: Claude Code, Cursor, Codex, Copilot, Muse, Hermes.
+        guard pillId == "integration_claude" || isCursorEditor || isCodexRequest || isCopilotRequest || isMuseRequest || isHermesRequest else {
             Task.detached { [weak self] in
                 self?.sendLine(fd: fd, text: #"{"permissionDecision":"ask"}"#)
                 close(fd)
@@ -893,7 +892,8 @@ final class HookServer: @unchecked Sendable {
         } else {
             pillId = "integration_claude"
         }
-        guard isCodexRequest || isCursorEditor || isVSCodeEditor else {
+        // Supported agents for in-app questions: Claude Code, Cursor, Codex.
+        guard pillId == "integration_claude" || isCursorEditor || isCodexRequest else {
             Task.detached { [weak self] in
                 self?.sendLine(fd: fd, text: #"{"permissionDecision":"ask"}"#)
                 close(fd)
