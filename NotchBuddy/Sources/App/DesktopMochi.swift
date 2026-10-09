@@ -128,7 +128,8 @@ final class DesktopMochiController {
     private var pendingSlapWorkItem: DispatchWorkItem?
 
     // Sleep detection
-    private var lastAgentActive: Date = .distantPast
+    private var lastActivityTime: Date = .now
+    private var lastMouseLocation: NSPoint = .zero
     private var isSleeping = false
 
     // Screen sleep / lock
@@ -187,6 +188,9 @@ final class DesktopMochiController {
         eng.setState(AppState.shared.effectiveState, force: true)
         eng.setOutfit(AppState.shared.resolvedOutfit, animated: false)
         self.engine = eng
+        self.isSleeping = false
+        self.lastActivityTime = .now
+        self.lastMouseLocation = NSEvent.mouseLocation
 
         let vs = DesktopBotViewState()
         vs.lookOrigin = lookOriginFor(panel: p)
@@ -271,6 +275,9 @@ final class DesktopMochiController {
         eng.setState(AppState.shared.effectiveState, force: true)
         eng.setOutfit(AppState.shared.resolvedOutfit, animated: false)
         self.engine = eng
+        self.isSleeping = false
+        self.lastActivityTime = .now
+        self.lastMouseLocation = NSEvent.mouseLocation
 
         let vs = DesktopBotViewState()
         vs.lookOrigin = lookOriginFor(panel: p)
@@ -521,18 +528,51 @@ final class DesktopMochiController {
         // Update eye-tracking origin every frame
         viewState?.lookOrigin = lookOriginFor(panel: p)
 
-        // Sleep detection
+        // Track cursor movement across the screen
+        if lastMouseLocation == .zero {
+            lastMouseLocation = mouse
+        }
+        let mouseDelta = hypot(mouse.x - lastMouseLocation.x, mouse.y - lastMouseLocation.y)
+        if mouseDelta > 2.0 {
+            lastActivityTime = .now
+            lastMouseLocation = mouse
+        }
+
+        // Check system-wide hardware idle time (catches typing, keyboard shortcuts, trackpad gestures)
+        let systemIdle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        if systemIdle < 0.5 {
+            lastActivityTime = .now
+        }
+
         let agentActive = AppState.shared.effectiveState != .idle &&
                           AppState.shared.effectiveState != .sleeping
-        if agentActive { lastAgentActive = .now }
-        let dist     = hypot(mouse.x - pf.midX, mouse.y - pf.midY)
-        let interval = Date.now.timeIntervalSince(lastAgentActive)
-        let shouldSleep = DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: interval,
-                                                         mouseDistanceToPanelCenter: dist)
+        if agentActive {
+            lastActivityTime = .now
+        }
+
+        // Idle duration is the shortest interval since any user or agent activity
+        let idleInterval = min(Date.now.timeIntervalSince(lastActivityTime), systemIdle)
+        let isInteracting = isDragging || overBody
+
+        let shouldSleep = DesktopMochiLogic.shouldSleep(
+            secondsSinceActivity: idleInterval,
+            isInteracting: isInteracting,
+            agentActive: agentActive
+        )
+
         if shouldSleep != isSleeping {
             isSleeping = shouldSleep
             viewState?.isSleeping = shouldSleep
             engine?.setState(isSleeping ? .sleeping : AppState.shared.effectiveState)
+        }
+    }
+
+    private func wakeUpIfNeeded() {
+        lastActivityTime = .now
+        if isSleeping {
+            isSleeping = false
+            viewState?.isSleeping = false
+            engine?.setState(AppState.shared.effectiveState)
         }
     }
 
@@ -543,6 +583,7 @@ final class DesktopMochiController {
             guard let self else { return event }
             MainActor.assumeIsolated {
                 guard event.window === self.panel else { return }
+                self.wakeUpIfNeeded()
                 self.dragMouseStart    = NSEvent.mouseLocation
                 self.dragOriginAtStart = self.panel?.frame.origin ?? .zero
             }
@@ -552,6 +593,7 @@ final class DesktopMochiController {
         mouseDraggedMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDragged) { [weak self] event in
             guard let self else { return event }
             MainActor.assumeIsolated {
+                self.wakeUpIfNeeded()
                 let m = NSEvent.mouseLocation
                 if !self.isDragging {
                     let dist = hypot(m.x - self.dragMouseStart.x, m.y - self.dragMouseStart.y)
@@ -573,6 +615,7 @@ final class DesktopMochiController {
         mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
             guard let self else { return event }
             MainActor.assumeIsolated {
+                self.wakeUpIfNeeded()
                 let wasDragging = self.isDragging
                 self.isDragging = false
                 self.dragMouseStart = .zero
@@ -589,6 +632,7 @@ final class DesktopMochiController {
         globalMouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.isDragging else { return }
+                self.wakeUpIfNeeded()
                 self.isDragging = false
                 self.dragMouseStart = .zero
                 self.handleDragRelease(at: NSEvent.mouseLocation)
@@ -620,6 +664,7 @@ final class DesktopMochiController {
     }
 
     private func handleDragRelease(at mouse: NSPoint) {
+        wakeUpIfNeeded()
         let islandController = (NSApp.delegate as? AppDelegate)?.islandController
         let inNotchZone = islandController?.window?.frame.contains(mouse) == true
 

@@ -35,15 +35,26 @@ enum DesktopPhase: Equatable {
 /// Stateless helpers for `DesktopMochiController`.
 enum DesktopMochiLogic {
     static let panelSize:          CGFloat      = 120
-    static let sleepTimeout:       TimeInterval = 120
+    static let sleepTimeout:       TimeInterval = 15.0
     static let sleepMouseDistance: CGFloat      = 150
     static let clampMargin:        CGFloat      = 24
     static let bodyRadiusFraction: CGFloat      = 0.42
 
     /// Whether Mochi should enter sleeping state.
+    /// Sleeps if there has been no screen activity (mouse/keyboard/interaction) for 15 seconds.
+    /// Stays awake if the user is interacting/dragging, moving the mouse, typing, or an AI agent is active.
+    static func shouldSleep(secondsSinceActivity: TimeInterval,
+                             isInteracting: Bool = false,
+                             agentActive: Bool = false) -> Bool {
+        if isInteracting || agentActive { return false }
+        return secondsSinceActivity >= sleepTimeout
+    }
+
+    /// Legacy overload for distance-based checks
     static func shouldSleep(lastAgentActiveInterval: TimeInterval,
                              mouseDistanceToPanelCenter: CGFloat) -> Bool {
-        lastAgentActiveInterval > sleepTimeout && mouseDistanceToPanelCenter >= sleepMouseDistance
+        if mouseDistanceToPanelCenter < sleepMouseDistance { return false }
+        return lastAgentActiveInterval >= sleepTimeout
     }
 
     /// Hit-test the circular body inside a square panel (AppKit y-up local coords).

@@ -14,29 +14,33 @@ enum DesktopMochiTests {
     // MARK: - shouldSleep
 
     static func testShouldSleep() {
-        // Agent recently active → awake regardless of mouse distance
-        precondition(!DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: 5, mouseDistanceToPanelCenter: 300),
+        // Activity recently active (< 15s) → awake
+        precondition(!DesktopMochiLogic.shouldSleep(secondsSinceActivity: 5),
+                     "recent activity (< 15s) must not sleep")
+
+        // Interacting / dragging → awake even if idle was long
+        precondition(!DesktopMochiLogic.shouldSleep(secondsSinceActivity: 30, isInteracting: true),
+                     "interacting must not sleep")
+
+        // Agent active → awake
+        precondition(!DesktopMochiLogic.shouldSleep(secondsSinceActivity: 30, agentActive: true),
                      "active agent must not sleep")
 
-        // Long idle but mouse near panel → awake
+        // Exactly at timeout boundary (15.0s) → sleep
+        precondition(DesktopMochiLogic.shouldSleep(secondsSinceActivity: 15.0),
+                     "exactly at 15s timeout must sleep")
+
+        // Just past timeout boundary → sleep
+        precondition(DesktopMochiLogic.shouldSleep(secondsSinceActivity: 15.1),
+                     "past 15s timeout must sleep")
+
+        // Legacy compatibility checks
+        precondition(!DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: 5, mouseDistanceToPanelCenter: 300),
+                     "active agent must not sleep (legacy)")
         precondition(!DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: 200, mouseDistanceToPanelCenter: 50),
-                     "mouse near panel must not sleep")
-
-        // Long idle AND mouse far → sleep
+                     "mouse near panel must not sleep (legacy)")
         precondition(DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: 200, mouseDistanceToPanelCenter: 200),
-                     "long idle + far mouse must sleep")
-
-        // Exactly at timeout boundary → still awake (strictly greater than)
-        precondition(!DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: 120, mouseDistanceToPanelCenter: 300),
-                     "exactly at timeout must not sleep")
-
-        // Just past timeout boundary + far mouse → sleep
-        precondition(DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: 120.1, mouseDistanceToPanelCenter: 300),
-                     "just over timeout must sleep")
-
-        // Far mouse at exact distance threshold → sleep
-        precondition(DesktopMochiLogic.shouldSleep(lastAgentActiveInterval: 200, mouseDistanceToPanelCenter: 150),
-                     "at distance threshold must sleep")
+                     "long idle + far mouse must sleep (legacy)")
     }
 
     // MARK: - isOverBody
