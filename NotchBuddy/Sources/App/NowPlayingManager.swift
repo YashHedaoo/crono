@@ -15,7 +15,29 @@ private enum MediaRemoteBridge {
         return unsafeBitCast(sym, to: MRSendCommandFunc.self)
     }()
 
-    static func sendCommand(_ command: Int32) -> Bool {
+    typealias MRSendCommandToAppFunc = @convention(c) (
+        Int32,             // command
+        CFDictionary?,     // options
+        AnyObject?,        // origin (nil for local)
+        CFString,          // appBundleID
+        Int32,             // appOptions (0)
+        DispatchQueue?,    // queue
+        AnyObject?         // completion
+    ) -> Bool
+
+    private static let sendCommandToAppFunc: MRSendCommandToAppFunc? = {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_NOW),
+              let sym = dlsym(handle, "MRMediaRemoteSendCommandToApp") else {
+            return nil
+        }
+        return unsafeBitCast(sym, to: MRSendCommandToAppFunc.self)
+    }()
+
+    static func sendCommand(_ command: Int32, bundleId: String? = nil) -> Bool {
+        if let bundleId = bundleId, !bundleId.isEmpty, let fn = sendCommandToAppFunc {
+            let res = fn(command, nil, nil, bundleId as CFString, 0, nil, nil)
+            if res { return true }
+        }
         if let fn = sendCommandFunc {
             return fn(command, nil)
         }
@@ -35,7 +57,7 @@ private enum MediaRemoteBridge {
     static func isApplicationPlaying() async -> Bool {
         await withCheckedContinuation { continuation in
             if let fn = isPlayingFunc {
-                fn(DispatchQueue.main) { playing in
+                fn(DispatchQueue.global()) { playing in
                     continuation.resume(returning: playing)
                 }
             } else {
@@ -58,26 +80,25 @@ private enum MediaRemoteBridge {
         registerFunc?(DispatchQueue.main)
     }
 
-    static func play() {
-        _ = sendCommand(2) // kMRTogglePlayPause = 2 (Chromium/Chrome responds to toggle)
-        _ = sendCommand(0) // kMRPlay = 0 (Standard media play)
+    static func play(bundleId: String? = nil) {
+        _ = sendCommand(2, bundleId: bundleId) // kMRTogglePlayPause = 2
     }
 
-    static func pause() {
-        _ = sendCommand(1) // kMRPause = 1
+    static func pause(bundleId: String? = nil) {
+        _ = sendCommand(1, bundleId: bundleId) // kMRPause = 1
     }
 
-    static func togglePlayPause() {
-        _ = sendCommand(2) // kMRTogglePlayPause = 2
+    static func togglePlayPause(bundleId: String? = nil) {
+        _ = sendCommand(2, bundleId: bundleId) // kMRTogglePlayPause = 2
     }
 
-    static func nextTrack() {
-        _ = sendCommand(4) // kMRNextTrack
+    static func nextTrack(bundleId: String? = nil) {
+        _ = sendCommand(4, bundleId: bundleId) // kMRNextTrack
         postMediaKey(key: 17) // NX_KEYTYPE_NEXT
     }
 
-    static func previousTrack() {
-        _ = sendCommand(5) // kMRPreviousTrack
+    static func previousTrack(bundleId: String? = nil) {
+        _ = sendCommand(5, bundleId: bundleId) // kMRPreviousTrack
         postMediaKey(key: 18) // NX_KEYTYPE_PREVIOUS
     }
 
@@ -462,7 +483,27 @@ final class NowPlayingManager: ObservableObject {
 
     // MARK: - Playback Controls
 
+    private func bundleIdForCurrentPlayer() -> String? {
+        if player == "Spotify" { return "com.spotify.client" }
+        if player == "Apple Music" { return "com.apple.Music" }
+        if player == "YouTube" {
+            let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
+            switch browser {
+            case "Google Chrome": return "com.google.Chrome"
+            case "Safari": return "com.apple.Safari"
+            case "Arc": return "company.thebrowser.Browser"
+            case "Brave Browser": return "com.brave.Browser"
+            case "Microsoft Edge": return "com.microsoft.edgemac"
+            case "Opera": return "com.operasoftware.Opera"
+            case "Vivaldi": return "com.vivaldi.Vivaldi"
+            default: return "com.google.Chrome"
+            }
+        }
+        return nil
+    }
+
     func togglePlayPause() {
+        let bundleId = bundleIdForCurrentPlayer()
         if player == "Spotify" {
             executeAppleScript("""
             if application "Spotify" is running then
@@ -480,22 +521,17 @@ final class NowPlayingManager: ObservableObject {
         } else {
             // YouTube / Browser / System:
             if isPlaying {
-                MediaRemoteBridge.pause()
+                MediaRemoteBridge.pause(bundleId: bundleId)
                 isPlaying = false
                 youtubeIsPlaying = false
             } else {
-                let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
-                if player == "YouTube" && !browser.isEmpty {
-                    wakeUpBrowserTab(browser: browser)
-                }
-
-                MediaRemoteBridge.play()
+                MediaRemoteBridge.play(bundleId: bundleId)
                 isPlaying = true
                 youtubeIsPlaying = true
             }
 
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 250_000_000)
+                try? await Task.sleep(nanoseconds: 200_000_000)
                 guard let self else { return }
                 let sysPlaying = await MediaRemoteBridge.isApplicationPlaying()
                 if self.player == "YouTube" {
@@ -559,45 +595,8 @@ final class NowPlayingManager: ObservableObject {
             end if
             """)
         } else if player == "YouTube" {
-            let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
-            let js = "var btn = document.querySelector('.ytp-next-button'); if (btn) { btn.click(); } else { var v = document.querySelector('video'); if (v) v.currentTime += 10; }"
-            if browser == "Safari" {
-                executeAppleScript("""
-                tell application "Safari"
-                    if (count of windows) > 0 then
-                        repeat with w in windows
-                            repeat with t in tabs of w
-                                if URL of t contains "youtube.com" then
-                                    try
-                                        do JavaScript "\(js)" in t
-                                    end try
-                                    return
-                                end if
-                            end repeat
-                        end repeat
-                    end if
-                end tell
-                """)
-            } else if !browser.isEmpty {
-                executeAppleScript("""
-                tell application "\(browser)"
-                    if (count of windows) > 0 then
-                        repeat with w in windows
-                            repeat with t in tabs of w
-                                if URL of t contains "youtube.com" then
-                                    try
-                                        execute t javascript "\(js)"
-                                    end try
-                                    return
-                                end if
-                            end repeat
-                        end repeat
-                    end if
-                end tell
-                """)
-            } else {
-                MediaRemoteBridge.nextTrack()
-            }
+            let bundleId = bundleIdForCurrentPlayer()
+            MediaRemoteBridge.nextTrack(bundleId: bundleId)
         } else {
             MediaRemoteBridge.nextTrack()
         }
@@ -617,45 +616,8 @@ final class NowPlayingManager: ObservableObject {
             end if
             """)
         } else if player == "YouTube" {
-            let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
-            let js = "var v = document.querySelector('video'); if (v) { if (v.currentTime > 3) { v.currentTime = 0; } else { var btn = document.querySelector('.ytp-prev-button'); if (btn) btn.click(); else v.currentTime = 0; } }"
-            if browser == "Safari" {
-                executeAppleScript("""
-                tell application "Safari"
-                    if (count of windows) > 0 then
-                        repeat with w in windows
-                            repeat with t in tabs of w
-                                if URL of t contains "youtube.com" then
-                                    try
-                                        do JavaScript "\(js)" in t
-                                    end try
-                                    return
-                                end if
-                            end repeat
-                        end repeat
-                    end if
-                end tell
-                """)
-            } else if !browser.isEmpty {
-                executeAppleScript("""
-                tell application "\(browser)"
-                    if (count of windows) > 0 then
-                        repeat with w in windows
-                            repeat with t in tabs of w
-                                if URL of t contains "youtube.com" then
-                                    try
-                                        execute t javascript "\(js)"
-                                    end try
-                                    return
-                                end if
-                            end repeat
-                        end repeat
-                    end if
-                end tell
-                """)
-            } else {
-                MediaRemoteBridge.previousTrack()
-            }
+            let bundleId = bundleIdForCurrentPlayer()
+            MediaRemoteBridge.previousTrack(bundleId: bundleId)
         } else {
             MediaRemoteBridge.previousTrack()
         }
