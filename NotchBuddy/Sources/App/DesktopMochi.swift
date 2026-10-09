@@ -261,6 +261,9 @@ final class DesktopMochiController {
 
         let p = makeBlankPanel()
         p.setFrame(NSRect(origin: startOrigin, size: CGSize(width: s, height: s)), display: false)
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        p.ignoresMouseEvents = true
 
         let eng = BotEngine()
         eng.setState(AppState.shared.effectiveState, force: true)
@@ -408,6 +411,9 @@ final class DesktopMochiController {
         p.backgroundColor = .clear
         p.isOpaque = false
         p.hasShadow = false
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        p.ignoresMouseEvents = true
         return p
     }
 
@@ -568,7 +574,8 @@ final class DesktopMochiController {
                 let dx = m.x - self.dragMouseStart.x
                 let dy = m.y - self.dragMouseStart.y
                 let newOrigin = self.clampToVisibleFrame(
-                    NSPoint(x: self.dragOriginAtStart.x + dx, y: self.dragOriginAtStart.y + dy))
+                    NSPoint(x: self.dragOriginAtStart.x + dx, y: self.dragOriginAtStart.y + dy),
+                    mouse: m)
                 p.setFrameOrigin(newOrigin)
                 self.viewState?.lookOrigin = self.lookOriginFor(panel: p)
                 if self.alertPanel != nil {
@@ -877,12 +884,14 @@ final class DesktopMochiController {
             panelSize:  DesktopMochiController.panelSize)
     }
 
-    private func clampToVisibleFrame(_ origin: NSPoint) -> NSPoint {
-        let screen = NSScreen.screens.min(by: {
-            let da = hypot(origin.x - $0.visibleFrame.midX, origin.y - $0.visibleFrame.midY)
-            let db = hypot(origin.x - $1.visibleFrame.midX, origin.y - $1.visibleFrame.midY)
-            return da < db
-        }) ?? NSScreen.main!
+    private func clampToVisibleFrame(_ origin: NSPoint, mouse: NSPoint? = nil) -> NSPoint {
+        let targetPoint = mouse ?? origin
+        let screen = NSScreen.screens.first(where: { NSMouseInRect(targetPoint, $0.frame, false) })
+            ?? NSScreen.screens.min(by: {
+                let da = hypot(origin.x - $0.visibleFrame.midX, origin.y - $0.visibleFrame.midY)
+                let db = hypot(origin.x - $1.visibleFrame.midY, origin.y - $1.visibleFrame.midY)
+                return da < db
+            }) ?? NSScreen.main!
         let pt = DesktopMochiLogic.clampOrigin(
             CGPoint(x: origin.x, y: origin.y),
             panelSize:    DesktopMochiController.panelSize,
