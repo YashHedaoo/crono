@@ -22,10 +22,28 @@ private enum MediaRemoteBridge {
         return false
     }
 
-    static func togglePlayPause() {
-        if !sendCommand(2) { // kMRTogglePlayPause
-            postMediaKey(key: 16) // NX_KEYTYPE_PLAY fallback
+    typealias MRIsPlayingFunc = @convention(c) (DispatchQueue, @escaping (Bool) -> Void) -> Void
+
+    private static let isPlayingFunc: MRIsPlayingFunc? = {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_NOW),
+              let sym = dlsym(handle, "MRMediaRemoteGetNowPlayingApplicationIsPlaying") else {
+            return nil
         }
+        return unsafeBitCast(sym, to: MRIsPlayingFunc.self)
+    }()
+
+    static func getNowPlayingApplicationIsPlaying(completion: @escaping (Bool) -> Void) {
+        if let fn = isPlayingFunc {
+            fn(DispatchQueue.main) { playing in
+                completion(playing)
+            }
+        } else {
+            completion(false)
+        }
+    }
+
+    static func togglePlayPause() {
+        postMediaKey(key: 16) // NX_KEYTYPE_PLAY system toggle
     }
 
     static func nextTrack() {
@@ -150,10 +168,29 @@ final class NowPlayingManager: ObservableObject {
 
     private func startPeriodicScanner() {
         scanTask = Task { [weak self] in
+            var cycle = 0
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2.0s
+                try? await Task.sleep(nanoseconds: 600_000_000) // 0.6s
                 guard let self else { break }
-                await self.scanForYouTubePlayback()
+                self.checkSystemPlayingState()
+                cycle += 1
+                if cycle % 3 == 0 { // Every ~1.8s
+                    await self.scanForYouTubePlayback()
+                }
+            }
+        }
+    }
+
+    func checkSystemPlayingState() {
+        MediaRemoteBridge.getNowPlayingApplicationIsPlaying { [weak self] isSystemPlaying in
+            guard let self else { return }
+            if self.player == "YouTube" {
+                if self.youtubeIsPlaying != isSystemPlaying {
+                    self.youtubeIsPlaying = isSystemPlaying
+                    self.isPlaying = isSystemPlaying
+                }
+            } else if !self.player.isEmpty && self.player != "Spotify" && self.player != "Apple Music" {
+                self.isPlaying = isSystemPlaying
             }
         }
     }
@@ -184,11 +221,7 @@ final class NowPlayingManager: ObservableObject {
                                 repeat with t in tabs of w
                                     set u to URL of t
                                     if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                        set playState to "unknown"
-                                        try
-                                            set playState to do JavaScript "var v = document.querySelector('video'); v ? (!v.paused ? 'playing' : 'paused') : 'unknown'" in t
-                                        end try
-                                        return "Safari|||" & name of t & "|||" & u & "|||" & playState
+                                        return "Safari|||" & name of t & "|||" & u
                                     end if
                                 end repeat
                             end repeat
@@ -204,11 +237,7 @@ final class NowPlayingManager: ObservableObject {
                                 repeat with t in tabs of w
                                     set u to URL of t
                                     if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                        set playState to "unknown"
-                                        try
-                                            set playState to execute t javascript "var v = document.querySelector('video'); v ? (!v.paused ? 'playing' : 'paused') : 'unknown'"
-                                        end try
-                                        return "\(b.name)|||" & title of t & "|||" & u & "|||" & playState
+                                        return "\(b.name)|||" & title of t & "|||" & u
                                     end if
                                 end repeat
                             end repeat
@@ -235,7 +264,6 @@ final class NowPlayingManager: ObservableObject {
                 let browser = parts[0]
                 let rawTitle = parts[1]
                 let url = parts[2]
-                let playState = parts.count >= 4 ? parts[3] : "unknown"
 
                 let parsed = Self.parseYouTubeTitle(rawTitle)
                 self.youtubeBrowser = browser
@@ -243,10 +271,12 @@ final class NowPlayingManager: ObservableObject {
                 self.youtubeArtist = parsed.artist
                 self.youtubeUrl = url
 
-                if playState == "playing" {
-                    self.youtubeIsPlaying = true
-                } else if playState == "paused" {
-                    self.youtubeIsPlaying = false
+                MediaRemoteBridge.getNowPlayingApplicationIsPlaying { [weak self] isSystemPlaying in
+                    guard let self else { return }
+                    self.youtubeIsPlaying = isSystemPlaying
+                    if self.player == "YouTube" {
+                        self.isPlaying = isSystemPlaying
+                    }
                 }
             }
         } else {
@@ -406,61 +436,18 @@ final class NowPlayingManager: ObservableObject {
             end if
             """)
             isPlaying.toggle()
-        } else if player == "YouTube" {
-            toggleYouTubePlayback()
         } else {
+            // YouTube / Browser / System:
             MediaRemoteBridge.togglePlayPause()
             isPlaying.toggle()
-        }
-    }
-
-    private func toggleYouTubePlayback() {
-        let shouldPlay = !isPlaying
-        let scriptTarget = shouldPlay ? "play()" : "pause()"
-        let browser = sourceBrowser.isEmpty ? youtubeBrowser : sourceBrowser
-
-        if browser == "Safari" {
-            executeAppleScript("""
-            tell application "Safari"
-                if (count of windows) > 0 then
-                    repeat with w in windows
-                        repeat with t in tabs of w
-                            set u to URL of t
-                            if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                try
-                                    do JavaScript "var v = document.querySelector('video'); if (v) { v.\(scriptTarget); }" in t
-                                end try
-                                return
-                            end if
-                        end repeat
-                    end repeat
-                end if
-            end tell
-            """)
-        } else if !browser.isEmpty {
-            executeAppleScript("""
-            tell application "\(browser)"
-                if (count of windows) > 0 then
-                    repeat with w in windows
-                        repeat with t in tabs of w
-                            set u to URL of t
-                            if u contains "youtube.com/watch" or u contains "youtu.be" or u contains "youtube.com/live" or u contains "youtube.com/shorts" then
-                                try
-                                    execute t javascript "var v = document.querySelector('video'); if (v) { v.\(scriptTarget); }"
-                                end try
-                                return
-                            end if
-                        end repeat
-                    end repeat
-                end if
-            end tell
-            """)
-        } else {
-            MediaRemoteBridge.togglePlayPause()
+            if player == "YouTube" {
+                youtubeIsPlaying = isPlaying
+            }
         }
 
-        self.youtubeIsPlaying = shouldPlay
-        self.isPlaying = shouldPlay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.checkSystemPlayingState()
+        }
     }
 
     func nextTrack() {

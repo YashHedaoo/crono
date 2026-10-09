@@ -1111,60 +1111,60 @@ struct NowPlayingCardView: View {
     var body: some View {
         let isMochiFloating = appState.mochiOnDesktop
 
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             WidgetCardHeader(
                 task: task,
                 overrideColor: manager.playerColor,
                 overrideSubtitle: manager.player.isEmpty ? "Media Player" : manager.player
             )
 
-            HStack(alignment: .center, spacing: isMochiFloating ? 14 : 10) {
+            HStack(alignment: .center, spacing: 8) {
                 // 1. Spinning Vinyl Record / CD with Thumbnail in Center
                 RotatingVinylRecordView(
                     isPlaying: manager.isPlaying,
                     thumbnailUrl: manager.thumbnailUrl,
                     playerColor: manager.playerColor,
                     playerIcon: manager.playerIcon,
-                    discSize: isMochiFloating ? 64 : 56
+                    discSize: isMochiFloating ? 50 : 44
                 )
 
                 // 2. Track / Video Title, Artist, and Source Badge
-                VStack(alignment: .leading, spacing: 2.5) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(manager.title.isEmpty ? "Ready to Play" : manager.title)
-                        .font(.system(size: isMochiFloating ? 13 : 11.5, weight: .semibold))
+                        .font(.system(size: 11.5, weight: .semibold))
                         .foregroundColor(Color(hex: "#F5F6F8"))
                         .lineLimit(1)
                         .truncationMode(.tail)
 
-                    Text(manager.artist.isEmpty ? (manager.player.isEmpty ? "Spotify • YouTube • Apple Music" : manager.player) : manager.artist)
-                        .font(.system(size: 10))
+                    Text(manager.artist.isEmpty ? (manager.player.isEmpty ? "Media Player" : manager.player) : manager.artist)
+                        .font(.system(size: 9.5))
                         .foregroundColor(Color(hex: "#8E939C"))
                         .lineLimit(1)
                         .truncationMode(.tail)
 
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         if !manager.player.isEmpty {
                             HStack(spacing: 3) {
                                 if manager.player == "YouTube" {
                                     Image(systemName: "play.rectangle.fill")
-                                        .font(.system(size: 7))
+                                        .font(.system(size: 6.5))
                                 } else if manager.player == "Spotify" {
                                     Image(systemName: "waveform")
-                                        .font(.system(size: 7))
+                                        .font(.system(size: 6.5))
                                 } else {
                                     Image(systemName: "music.note")
-                                        .font(.system(size: 7))
+                                        .font(.system(size: 6.5))
                                 }
 
-                                Text(manager.sourceBrowser.isEmpty ? manager.player : "\(manager.player) • \(manager.sourceBrowser)")
-                                    .font(.system(size: 8.5, weight: .semibold))
+                                Text(manager.player)
+                                    .font(.system(size: 8, weight: .semibold))
                                     .lineLimit(1)
                             }
                             .foregroundColor(Color(hex: manager.playerColor))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
                             .background(Color(hex: manager.playerColor).opacity(0.16))
-                            .cornerRadius(3.5)
+                            .cornerRadius(3)
                             .fixedSize()
                         }
 
@@ -1174,19 +1174,18 @@ struct NowPlayingCardView: View {
                         }
                     }
                 }
-
-                Spacer(minLength: 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 // 3. Playback Controls
-                HStack(spacing: isMochiFloating ? 7 : 5) {
+                HStack(spacing: 4) {
                     Button {
                         manager.previousTrack()
                         SoundEngine.shared.play("blip")
                     } label: {
                         Image(systemName: "backward.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 9))
                             .foregroundColor(Color(hex: "#8E939C"))
-                            .frame(width: 24, height: 24)
+                            .frame(width: 22, height: 22)
                             .background(Color.white.opacity(0.06))
                             .clipShape(Circle())
                     }
@@ -1207,11 +1206,11 @@ struct NowPlayingCardView: View {
                                         endPoint: .bottom
                                     )
                                 )
-                                .frame(width: isMochiFloating ? 30 : 28, height: isMochiFloating ? 30 : 28)
-                                .shadow(color: Color(hex: manager.playerColor).opacity(0.45), radius: 5, x: 0, y: 1.5)
+                                .frame(width: 26, height: 26)
+                                .shadow(color: Color(hex: manager.playerColor).opacity(0.4), radius: 4, x: 0, y: 1)
 
                             Image(systemName: manager.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: isMochiFloating ? 12 : 11, weight: .bold))
+                                .font(.system(size: 10.5, weight: .bold))
                                 .foregroundColor(manager.player == "YouTube" ? .white : .black)
                         }
                     }
@@ -1223,9 +1222,9 @@ struct NowPlayingCardView: View {
                         SoundEngine.shared.play("blip")
                     } label: {
                         Image(systemName: "forward.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 9))
                             .foregroundColor(Color(hex: "#8E939C"))
-                            .frame(width: 24, height: 24)
+                            .frame(width: 22, height: 22)
                             .background(Color.white.opacity(0.06))
                             .clipShape(Circle())
                     }
@@ -1238,9 +1237,9 @@ struct NowPlayingCardView: View {
                             SoundEngine.shared.play("open")
                         } label: {
                             Image(systemName: "arrow.up.right")
-                                .font(.system(size: 9.5, weight: .semibold))
+                                .font(.system(size: 8.5, weight: .semibold))
                                 .foregroundColor(Color(hex: "#8E939C"))
-                                .frame(width: 22, height: 22)
+                                .frame(width: 20, height: 20)
                                 .background(Color.white.opacity(0.06))
                                 .clipShape(Circle())
                         }
@@ -1248,13 +1247,15 @@ struct NowPlayingCardView: View {
                         .help(manager.player == "YouTube" ? "Switch to YouTube Tab" : "Open \(manager.player)")
                     }
                 }
+                .fixedSize()
             }
             .padding(.top, 2)
         }
-        .padding(.leading, isMochiFloating ? 16 : 106)
-        .padding(.trailing, 14)
+        .padding(.leading, isMochiFloating ? 14 : 106)
+        .padding(.trailing, 10)
         .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(width: 322, alignment: .topLeading)
+        .clipped()
     }
 }
 
