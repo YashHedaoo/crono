@@ -322,6 +322,7 @@ struct WidgetCardView: View {
 
 struct WidgetCardHeader: View {
     let task: AgentTask
+    var overrideTitle: String? = nil
     var overrideColor: String? = nil
     var overrideSubtitle: String? = nil
 
@@ -330,7 +331,7 @@ struct WidgetCardHeader: View {
             Circle()
                 .fill(Color(hex: overrideColor ?? task.color))
                 .frame(width: 7, height: 7)
-            Text(task.name)
+            Text(overrideTitle ?? task.name)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(Color(hex: "#F5F6F8"))
             Text(overrideSubtitle ?? "Widget")
@@ -978,11 +979,13 @@ struct RotatingVinylRecordView: View {
     let thumbnailUrl: String?
     let playerColor: String
     let playerIcon: String
-    var discSize: CGFloat = 58
+    var discSize: CGFloat = 48
 
     var body: some View {
         TimelineView(.animation(paused: !isPlaying)) { timeline in
-            let angle = (timeline.date.timeIntervalSinceReferenceDate * 45).truncatingRemainder(dividingBy: 360)
+            let angle = isPlaying
+                ? (timeline.date.timeIntervalSinceReferenceDate * 45).truncatingRemainder(dividingBy: 360)
+                : 0.0
 
             ZStack {
                 // Outer Vinyl Black Disc
@@ -1001,7 +1004,7 @@ struct RotatingVinylRecordView: View {
                         )
                     )
                     .frame(width: discSize, height: discSize)
-                    .shadow(color: Color.black.opacity(0.6), radius: 5, x: 0, y: 2)
+                    .shadow(color: Color.black.opacity(0.6), radius: 4, x: 0, y: 1.5)
 
                 // Vinyl sound grooves (concentric micro-rings)
                 Circle()
@@ -1111,10 +1114,11 @@ struct NowPlayingCardView: View {
     var body: some View {
         let isMochiFloating = appState.mochiOnDesktop
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             WidgetCardHeader(
                 task: task,
-                overrideColor: manager.playerColor,
+                overrideTitle: manager.isPlaying ? "Now Playing" : "Paused",
+                overrideColor: manager.isPlaying ? manager.playerColor : "#6B7079",
                 overrideSubtitle: manager.player.isEmpty ? "Media Player" : manager.player
             )
 
@@ -1125,22 +1129,24 @@ struct NowPlayingCardView: View {
                     thumbnailUrl: manager.thumbnailUrl,
                     playerColor: manager.playerColor,
                     playerIcon: manager.playerIcon,
-                    discSize: isMochiFloating ? 50 : 44
+                    discSize: isMochiFloating ? 48 : 38
                 )
 
                 // 2. Track / Video Title, Artist, and Source Badge
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1.5) {
                     Text(manager.title.isEmpty ? "Ready to Play" : manager.title)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundColor(Color(hex: "#F5F6F8"))
                         .lineLimit(1)
                         .truncationMode(.tail)
 
-                    Text(manager.artist.isEmpty ? (manager.player.isEmpty ? "Media Player" : manager.player) : manager.artist)
-                        .font(.system(size: 9.5))
-                        .foregroundColor(Color(hex: "#8E939C"))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    if !manager.artist.isEmpty && manager.artist != manager.player {
+                        Text(manager.artist)
+                            .font(.system(size: 9.5))
+                            .foregroundColor(Color(hex: "#8E939C"))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
 
                     HStack(spacing: 4) {
                         if !manager.player.isEmpty {
@@ -1161,7 +1167,7 @@ struct NowPlayingCardView: View {
                                     .lineLimit(1)
                             }
                             .foregroundColor(Color(hex: manager.playerColor))
-                            .padding(.horizontal, 4.5)
+                            .padding(.horizontal, 4)
                             .padding(.vertical, 1.5)
                             .background(Color(hex: manager.playerColor).opacity(0.16))
                             .cornerRadius(3)
@@ -1176,8 +1182,8 @@ struct NowPlayingCardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // 3. Playback Controls
-                HStack(spacing: 4) {
+                // 3. Playback Controls (Prev, Play/Pause, Next)
+                HStack(spacing: 5) {
                     Button {
                         manager.previousTrack()
                         SoundEngine.shared.play("blip")
@@ -1230,26 +1236,10 @@ struct NowPlayingCardView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Next / Skip")
-
-                    if !manager.player.isEmpty {
-                        Button {
-                            manager.openActiveMedia()
-                            SoundEngine.shared.play("open")
-                        } label: {
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: 8.5, weight: .semibold))
-                                .foregroundColor(Color(hex: "#8E939C"))
-                                .frame(width: 20, height: 20)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(manager.player == "YouTube" ? "Switch to YouTube Tab" : "Open \(manager.player)")
-                    }
                 }
                 .fixedSize()
             }
-            .padding(.top, 2)
+            .padding(.top, 1)
         }
         .padding(.leading, isMochiFloating ? 14 : 106)
         .padding(.trailing, 10)

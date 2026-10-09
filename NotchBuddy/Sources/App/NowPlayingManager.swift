@@ -32,18 +32,48 @@ private enum MediaRemoteBridge {
         return unsafeBitCast(sym, to: MRIsPlayingFunc.self)
     }()
 
-    static func getNowPlayingApplicationIsPlaying(completion: @escaping (Bool) -> Void) {
-        if let fn = isPlayingFunc {
-            fn(DispatchQueue.main) { playing in
-                completion(playing)
+    static func isApplicationPlaying() async -> Bool {
+        await withCheckedContinuation { continuation in
+            if let fn = isPlayingFunc {
+                fn(DispatchQueue.main) { playing in
+                    continuation.resume(returning: playing)
+                }
+            } else {
+                continuation.resume(returning: false)
             }
-        } else {
-            completion(false)
+        }
+    }
+
+    typealias MRRegisterFunc = @convention(c) (DispatchQueue) -> Void
+
+    private static let registerFunc: MRRegisterFunc? = {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_NOW),
+              let sym = dlsym(handle, "MRMediaRemoteRegisterForNowPlayingNotifications") else {
+            return nil
+        }
+        return unsafeBitCast(sym, to: MRRegisterFunc.self)
+    }()
+
+    static func registerForNotifications() {
+        registerFunc?(DispatchQueue.main)
+    }
+
+    static func play() {
+        if !sendCommand(0) { // kMRPlay = 0
+            postMediaKey(key: 16)
+        }
+    }
+
+    static func pause() {
+        if !sendCommand(1) { // kMRPause = 1
+            postMediaKey(key: 16)
         }
     }
 
     static func togglePlayPause() {
-        postMediaKey(key: 16) // NX_KEYTYPE_PLAY system toggle
+        if !sendCommand(2) { // kMRTogglePlayPause = 2
+            postMediaKey(key: 16)
+        }
     }
 
     static func nextTrack() {
@@ -162,35 +192,55 @@ final class NowPlayingManager: ObservableObject {
 
             self.recomputeActivePlayer()
         }
+
+        // 3. System / Browser (YouTube in Chrome, Safari, Brave, Arc, Edge)
+        MediaRemoteBridge.registerForNotifications()
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
+                if self.player == "YouTube" || (!self.spotifyIsPlaying && !self.musicIsPlaying) {
+                    if self.youtubeIsPlaying != isSystemPlaying || self.isPlaying != isSystemPlaying {
+                        self.youtubeIsPlaying = isSystemPlaying
+                        self.isPlaying = isSystemPlaying
+                    }
+                }
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("kMRMediaRemoteNowPlayingInfoDidChangeNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.scanForYouTubePlayback()
+            }
+        }
     }
 
     // MARK: - Browser Scanner (YouTube in Safari, Chrome, Arc, Brave, Edge, etc.)
 
     private func startPeriodicScanner() {
         scanTask = Task { [weak self] in
-            var cycle = 0
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 600_000_000) // 0.6s
+                try? await Task.sleep(nanoseconds: 350_000_000) // 0.35s responsive loop
                 guard let self else { break }
-                self.checkSystemPlayingState()
-                cycle += 1
-                if cycle % 3 == 0 { // Every ~1.8s
-                    await self.scanForYouTubePlayback()
-                }
-            }
-        }
-    }
-
-    func checkSystemPlayingState() {
-        MediaRemoteBridge.getNowPlayingApplicationIsPlaying { [weak self] isSystemPlaying in
-            guard let self else { return }
-            if self.player == "YouTube" {
-                if self.youtubeIsPlaying != isSystemPlaying {
-                    self.youtubeIsPlaying = isSystemPlaying
+                let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
+                if self.player == "YouTube" {
+                    if self.youtubeIsPlaying != isSystemPlaying {
+                        self.youtubeIsPlaying = isSystemPlaying
+                        self.isPlaying = isSystemPlaying
+                    }
+                } else if !self.player.isEmpty && self.player != "Spotify" && self.player != "Apple Music" {
                     self.isPlaying = isSystemPlaying
                 }
-            } else if !self.player.isEmpty && self.player != "Spotify" && self.player != "Apple Music" {
-                self.isPlaying = isSystemPlaying
+                await self.scanForYouTubePlayback()
             }
         }
     }
@@ -271,13 +321,9 @@ final class NowPlayingManager: ObservableObject {
                 self.youtubeArtist = parsed.artist
                 self.youtubeUrl = url
 
-                MediaRemoteBridge.getNowPlayingApplicationIsPlaying { [weak self] isSystemPlaying in
-                    guard let self else { return }
-                    self.youtubeIsPlaying = isSystemPlaying
-                    if self.player == "YouTube" {
-                        self.isPlaying = isSystemPlaying
-                    }
-                }
+                let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
+                self.youtubeIsPlaying = isSystemPlaying
+                self.isPlaying = isSystemPlaying
             }
         } else {
             // No YouTube video tab open
@@ -438,15 +484,15 @@ final class NowPlayingManager: ObservableObject {
             isPlaying.toggle()
         } else {
             // YouTube / Browser / System:
-            MediaRemoteBridge.togglePlayPause()
-            isPlaying.toggle()
-            if player == "YouTube" {
-                youtubeIsPlaying = isPlaying
+            if isPlaying {
+                MediaRemoteBridge.pause()
+                isPlaying = false
+                youtubeIsPlaying = false
+            } else {
+                MediaRemoteBridge.play()
+                isPlaying = true
+                youtubeIsPlaying = true
             }
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            self?.checkSystemPlayingState()
         }
     }
 
