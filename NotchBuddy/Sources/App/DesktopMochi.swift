@@ -35,18 +35,37 @@ struct DesktopBotView: View {
                 let now = timeline.date.timeIntervalSinceReferenceDate
                 let dt  = min(0.05, now - engine.lastTime)
 
-                // Eye tracking based on the panel's own screen position
-                engine.lookX = tanh((appState.mousePosition.x - viewState.lookOrigin.x) / 260)
-                engine.lookY = -tanh((appState.mousePosition.y - viewState.lookOrigin.y) / 200)
+                // Cinema Mode (Movie / Fullscreen Video) vs Music Dance
+                let isMediaPlaying = appState.musicPlaying || NowPlayingManager.shared.isPlaying
+                let isMovie = NowPlayingManager.shared.isWatchingMovie || appState.isWatchingMovie
+                engine.setWatchingMovie(isMovie)
+
+                // Eye tracking based on panel position (attentive screen gaze when watching movie)
+                if engine.isWatchingMovie {
+                    let mouseDistX = (appState.mousePosition.x - viewState.lookOrigin.x)
+                    let mouseDistY = (appState.mousePosition.y - viewState.lookOrigin.y)
+                    let mouseSpeed = hypot(mouseDistX, mouseDistY)
+                    let screenGazeX = CGFloat(sin(now * 0.4) * 0.10)
+                    let screenGazeY: CGFloat = 0.35
+                    if mouseSpeed > 450 {
+                        engine.lookX = tanh(mouseDistX / 280) * 0.4 + screenGazeX * 0.6
+                        engine.lookY = -tanh(mouseDistY / 220) * 0.2 + screenGazeY * 0.8
+                    } else {
+                        engine.lookX = screenGazeX
+                        engine.lookY = screenGazeY
+                    }
+                } else {
+                    engine.lookX = tanh((appState.mousePosition.x - viewState.lookOrigin.x) / 260)
+                    engine.lookY = -tanh((appState.mousePosition.y - viewState.lookOrigin.y) / 200)
+                }
 
                 // Desktop Mochi is always the "main" Mochi — always dressed
                 engine.setOutfit(appState.resolvedOutfit, animated: true)
 
-                // Dance when music/video plays
+                // Dance when music plays (suppressed during cinema movie mode)
                 let dancing: Bool = {
                     #if !APPSTORE
-                    let isMediaPlaying = appState.musicPlaying || NowPlayingManager.shared.isPlaying
-                    guard isMediaPlaying else { return false }
+                    guard isMediaPlaying && !isMovie else { return false }
                     let allowed: Set<BotState> = [.idle, .working, .thinking, .searching, .finished]
                     return allowed.contains(appState.effectiveState)
                     #else

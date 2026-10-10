@@ -54,10 +54,14 @@ private enum MediaRemoteBridge {
         return unsafeBitCast(sym, to: MRIsPlayingFunc.self)
     }()
 
-    struct SystemMediaInfo: Sendable {
+    struct SystemMediaInfo: @unchecked Sendable {
         let title: String
         let artist: String
+        let album: String
         let playbackRate: Double
+        let duration: Double
+        let elapsedTime: Double
+        let artworkData: Data?
     }
 
     typealias MRGetInfoFunc = @convention(c) (DispatchQueue, @escaping ([String: Any]?) -> Void) -> Void
@@ -76,8 +80,20 @@ private enum MediaRemoteBridge {
                 fn(DispatchQueue.global()) { info in
                     let title = info?["kMRMediaRemoteNowPlayingInfoTitle"] as? String ?? ""
                     let artist = info?["kMRMediaRemoteNowPlayingInfoArtist"] as? String ?? ""
+                    let album = info?["kMRMediaRemoteNowPlayingInfoAlbum"] as? String ?? ""
                     let rate = (info?["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? NSNumber)?.doubleValue ?? 0.0
-                    continuation.resume(returning: SystemMediaInfo(title: title, artist: artist, playbackRate: rate))
+                    let duration = (info?["kMRMediaRemoteNowPlayingInfoDuration"] as? NSNumber)?.doubleValue ?? 0.0
+                    let elapsed = (info?["kMRMediaRemoteNowPlayingInfoElapsedTime"] as? NSNumber)?.doubleValue ?? 0.0
+                    let artworkData = info?["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data
+                    continuation.resume(returning: SystemMediaInfo(
+                        title: title,
+                        artist: artist,
+                        album: album,
+                        playbackRate: rate,
+                        duration: duration,
+                        elapsedTime: elapsed,
+                        artworkData: artworkData
+                    ))
                 }
             } else {
                 continuation.resume(returning: nil)
@@ -176,15 +192,24 @@ final class NowPlayingManager: ObservableObject {
             AppState.shared.musicPlaying = isPlaying
         }
     }
+    @Published var isWatchingMovie: Bool = false {
+        didSet {
+            AppState.shared.isWatchingMovie = isWatchingMovie
+        }
+    }
+    @Published var duration: Double = 0.0
+    @Published var elapsedTime: Double = 0.0
+    @Published var isVideo: Bool = false
     @Published var title: String = ""
     @Published var artist: String = ""
     @Published var album: String = ""
-    @Published var player: String = ""          // "Spotify", "YouTube", "Apple Music"
-    @Published var playerColor: String = "#10B981" // #10B981 (Spotify), #EF4444 (YouTube), #FA2D48 (Music)
+    @Published var player: String = ""          // "Spotify", "YouTube", "Apple Music", "Cinema"
+    @Published var playerColor: String = "#10B981" // #10B981 (Spotify), #EF4444 (YouTube), #FA2D48 (Music), #A855F7 (Cinema)
     @Published var playerIcon: String = "music.note"
     @Published var mediaUrl: String = ""
     @Published var sourceBrowser: String = ""
     @Published var thumbnailUrl: String? = nil
+    @Published var artworkImage: NSImage? = nil
 
     // Internal trackers
     private var spotifyIsPlaying = false
@@ -202,6 +227,17 @@ final class NowPlayingManager: ObservableObject {
     private var youtubeUrl = ""
     private var youtubeBrowser = ""
     private var youtubeIsPlaying = false
+
+    // System / Browser MediaRemote trackers
+    private var systemMediaTitle = ""
+    private var systemMediaArtist = ""
+    private var systemMediaAlbum = ""
+    private var systemMediaPlaybackRate: Double = 0.0
+    private var systemMediaDuration: Double = 0.0
+    private var systemMediaElapsedTime: Double = 0.0
+    private var systemMediaArtworkData: Data? = nil
+    private var systemMediaIsPlaying = false
+    private var lastSystemMediaSeenAt: Date = .distantPast
 
     private var scanTask: Task<Void, Never>?
     private var commandCooldownUntil: Date = .distantPast
@@ -284,6 +320,7 @@ final class NowPlayingManager: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 guard Date() >= self.commandCooldownUntil else { return }
+                await self.updateSystemMedia()
                 let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
                 guard Date() >= self.commandCooldownUntil else { return }
                 if !self.spotifyIsPlaying && !self.musicIsPlaying {
@@ -299,11 +336,30 @@ final class NowPlayingManager: ObservableObject {
 
     // MARK: - Browser Scanner (YouTube in Safari, Chrome, Arc, Brave, Edge, etc.)
 
+    private func updateSystemMedia() async {
+        guard let info = await MediaRemoteBridge.getNowPlayingInfo() else { return }
+        if !info.title.isEmpty {
+            self.systemMediaTitle = info.title
+            self.systemMediaArtist = info.artist
+            self.systemMediaAlbum = info.album
+            self.systemMediaDuration = info.duration
+            self.systemMediaElapsedTime = info.elapsedTime
+            self.systemMediaArtworkData = info.artworkData
+            self.systemMediaPlaybackRate = info.playbackRate
+            self.systemMediaIsPlaying = info.playbackRate > 0.0
+            self.lastSystemMediaSeenAt = Date()
+        } else if info.playbackRate == 0.0 {
+            self.systemMediaIsPlaying = false
+            self.systemMediaPlaybackRate = 0.0
+        }
+    }
+
     private func startPeriodicScanner() {
         scanTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 350_000_000) // 0.35s responsive loop
                 guard let self else { break }
+                await self.updateSystemMedia()
                 if Date() >= self.commandCooldownUntil {
                     let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
                     if Date() >= self.commandCooldownUntil {
@@ -496,6 +552,67 @@ final class NowPlayingManager: ObservableObject {
         return nil
     }
 
+    // MARK: - Fullscreen & Title Helpers
+
+    static func isFrontmostAppFullscreen() -> Bool {
+        guard let mainScreen = NSScreen.main else { return false }
+        let screenFrame = mainScreen.frame
+        let visibleFrame = mainScreen.visibleFrame
+        guard let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return false }
+
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else { return false }
+
+        for win in list {
+            guard let pid = win[kCGWindowOwnerPID as String] as? Int32, pid == frontmostPID else { continue }
+            if let bounds = win[kCGWindowBounds as String] as? [String: CGFloat] {
+                let w = bounds["Width"] ?? 0
+                let h = bounds["Height"] ?? 0
+                if w >= screenFrame.width - 4 && h >= visibleFrame.height - 20 {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    static func cleanMediaTitle(_ raw: String) -> (title: String, source: String) {
+        var cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let match = cleaned.range(of: #"^\(\d+\+?\)\s*"#, options: .regularExpression) {
+            cleaned.removeSubrange(match)
+        }
+        let suffixes = [" - hurawatch", " - Hurawatch", " - Netflix", " - Prime Video", " - Disney+", " - YouTube", " - Vimeo", " - Plex", " - Twitch"]
+        for suf in suffixes {
+            if cleaned.localizedCaseInsensitiveContains(suf) {
+                if let r = cleaned.range(of: suf, options: .caseInsensitive) {
+                    let source = suf.trimmingCharacters(in: CharacterSet(charactersIn: " -"))
+                    cleaned = String(cleaned[..<r.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    return (cleaned, source)
+                }
+            }
+        }
+        if let match = cleaned.range(of: #"\s*[-|•]\s*([A-Za-z0-9\s]+)$"#, options: .regularExpression) {
+            let fullMatch = String(cleaned[match])
+            let source = fullMatch.trimmingCharacters(in: CharacterSet(charactersIn: " -|• "))
+            let left = String(cleaned[..<match.lowerBound]).trimmingCharacters(in: .whitespaces)
+            if !left.isEmpty {
+                return (left, source)
+            }
+        }
+        return (cleaned, "")
+    }
+
+    static func isCinemaPlayback(duration: Double, title: String, isFullscreen: Bool) -> Bool {
+        if duration >= 420.0 { return true }
+        if isFullscreen && (duration >= 90.0 || duration == 0) { return true }
+        let lower = title.lowercased()
+        let movieKeywords = ["movie", "hurawatch", "netflix", "film", "episode", "season", "s0", "e0", "prime video", "disney+", "plex", "hbo", "cinema", "brand new day"]
+        for kw in movieKeywords {
+            if lower.contains(kw) { return true }
+        }
+        return false
+    }
+
     // MARK: - State Arbitration
 
     private func recomputeActivePlayer() {
@@ -510,6 +627,9 @@ final class NowPlayingManager: ObservableObject {
             mediaUrl = ""
             sourceBrowser = ""
             thumbnailUrl = nil
+            artworkImage = nil
+            isWatchingMovie = false
+            isVideo = false
             isPlaying = true
             return
         }
@@ -525,21 +645,88 @@ final class NowPlayingManager: ObservableObject {
             mediaUrl = ""
             sourceBrowser = ""
             thumbnailUrl = nil
+            artworkImage = nil
+            isWatchingMovie = false
+            isVideo = false
             isPlaying = true
             return
         }
 
-        // Priority 3: YouTube if detected in any browser
-        if !youtubeTitle.isEmpty {
-            player = "YouTube"
-            playerColor = "#EF4444"
-            playerIcon = "play.rectangle.fill"
+        // Priority 3: YouTube if detected in any browser and actively playing
+        if !youtubeTitle.isEmpty && youtubeIsPlaying {
+            let isCinema = Self.isCinemaPlayback(duration: systemMediaDuration, title: youtubeTitle, isFullscreen: Self.isFrontmostAppFullscreen())
+            player = isCinema ? "Cinema" : "YouTube"
+            playerColor = isCinema ? "#A855F7" : "#EF4444"
+            playerIcon = isCinema ? "film.fill" : "play.rectangle.fill"
             title = youtubeTitle
             artist = youtubeArtist
             album = youtubeBrowser
             mediaUrl = youtubeUrl
             sourceBrowser = youtubeBrowser
-            isPlaying = youtubeIsPlaying
+            duration = systemMediaDuration
+            elapsedTime = systemMediaElapsedTime
+            isVideo = true
+            isWatchingMovie = isCinema
+            isPlaying = true
+            if let videoId = Self.parseYouTubeVideoId(youtubeUrl) {
+                thumbnailUrl = "https://img.youtube.com/vi/\(videoId)/mqdefault.jpg"
+            } else {
+                thumbnailUrl = nil
+            }
+            if let data = systemMediaArtworkData {
+                artworkImage = NSImage(data: data)
+            } else {
+                artworkImage = nil
+            }
+            return
+        }
+
+        // Priority 4: Generic System Media / Movie Playback (MediaRemote / Browsers / Streaming)
+        if systemMediaIsPlaying && !systemMediaTitle.isEmpty {
+            let cleaned = Self.cleanMediaTitle(systemMediaTitle)
+            let isCinema = Self.isCinemaPlayback(
+                duration: systemMediaDuration,
+                title: systemMediaTitle,
+                isFullscreen: Self.isFrontmostAppFullscreen()
+            )
+            player = isCinema ? "Cinema" : (cleaned.source.isEmpty ? "Media" : cleaned.source.capitalized)
+            playerColor = isCinema ? "#A855F7" : "#3B82F6"
+            playerIcon = isCinema ? "film.fill" : "play.rectangle.fill"
+            title = cleaned.title.isEmpty ? systemMediaTitle : cleaned.title
+            artist = !systemMediaArtist.isEmpty ? systemMediaArtist : (isCinema ? "Movie" : (cleaned.source.isEmpty ? "Web Video" : cleaned.source))
+            album = systemMediaAlbum
+            mediaUrl = ""
+            sourceBrowser = cleaned.source
+            duration = systemMediaDuration
+            elapsedTime = systemMediaElapsedTime
+            isVideo = true
+            isWatchingMovie = isCinema
+            isPlaying = true
+            thumbnailUrl = nil
+            if let data = systemMediaArtworkData {
+                artworkImage = NSImage(data: data)
+            } else {
+                artworkImage = nil
+            }
+            return
+        }
+
+        // Priority 5: Paused YouTube if tab still open
+        if !youtubeTitle.isEmpty {
+            let isCinema = Self.isCinemaPlayback(duration: systemMediaDuration, title: youtubeTitle, isFullscreen: false)
+            player = isCinema ? "Cinema" : "YouTube"
+            playerColor = isCinema ? "#A855F7" : "#EF4444"
+            playerIcon = isCinema ? "film.fill" : "play.rectangle.fill"
+            title = youtubeTitle
+            artist = youtubeArtist
+            album = youtubeBrowser
+            mediaUrl = youtubeUrl
+            sourceBrowser = youtubeBrowser
+            duration = systemMediaDuration
+            elapsedTime = systemMediaElapsedTime
+            isVideo = true
+            isWatchingMovie = false
+            isPlaying = false
             if let videoId = Self.parseYouTubeVideoId(youtubeUrl) {
                 thumbnailUrl = "https://img.youtube.com/vi/\(videoId)/mqdefault.jpg"
             } else {
@@ -548,11 +735,34 @@ final class NowPlayingManager: ObservableObject {
             return
         }
 
-        // Don't reset to idle/paused while a playback command is in flight — the scan
-        // may have transiently lost the YouTube tab while Chrome processed the command.
+        // Don't reset to idle/paused while a playback command is in flight
         if Date() < commandCooldownUntil { return }
 
-        // Priority 4: Paused Spotify if recently active
+        // Priority 6: Paused System Media if recently active
+        if !systemMediaTitle.isEmpty && Date().timeIntervalSince(lastSystemMediaSeenAt) < 4.0 {
+            let cleaned = Self.cleanMediaTitle(systemMediaTitle)
+            let isCinema = Self.isCinemaPlayback(
+                duration: systemMediaDuration,
+                title: systemMediaTitle,
+                isFullscreen: false
+            )
+            player = isCinema ? "Cinema" : (cleaned.source.isEmpty ? "Media" : cleaned.source.capitalized)
+            playerColor = isCinema ? "#A855F7" : "#3B82F6"
+            playerIcon = isCinema ? "film.fill" : "play.rectangle.fill"
+            title = cleaned.title.isEmpty ? systemMediaTitle : cleaned.title
+            artist = !systemMediaArtist.isEmpty ? systemMediaArtist : (isCinema ? "Movie" : "Web Video")
+            album = systemMediaAlbum
+            mediaUrl = ""
+            sourceBrowser = cleaned.source
+            duration = systemMediaDuration
+            elapsedTime = systemMediaElapsedTime
+            isVideo = true
+            isWatchingMovie = false
+            isPlaying = false
+            return
+        }
+
+        // Priority 7: Paused Spotify if recently active
         if !spotifyTitle.isEmpty {
             player = "Spotify"
             playerColor = "#10B981"
@@ -563,11 +773,14 @@ final class NowPlayingManager: ObservableObject {
             mediaUrl = ""
             sourceBrowser = ""
             thumbnailUrl = nil
+            artworkImage = nil
+            isWatchingMovie = false
+            isVideo = false
             isPlaying = false
             return
         }
 
-        // Priority 5: Paused Music
+        // Priority 8: Paused Music
         if !musicTitle.isEmpty {
             player = "Apple Music"
             playerColor = "#FA2D48"
@@ -578,6 +791,9 @@ final class NowPlayingManager: ObservableObject {
             mediaUrl = ""
             sourceBrowser = ""
             thumbnailUrl = nil
+            artworkImage = nil
+            isWatchingMovie = false
+            isVideo = false
             isPlaying = false
             return
         }
@@ -592,6 +808,11 @@ final class NowPlayingManager: ObservableObject {
         mediaUrl = ""
         sourceBrowser = ""
         thumbnailUrl = nil
+        artworkImage = nil
+        duration = 0.0
+        elapsedTime = 0.0
+        isVideo = false
+        isWatchingMovie = false
         isPlaying = false
     }
 
@@ -612,6 +833,12 @@ final class NowPlayingManager: ObservableObject {
             case "Vivaldi": return "com.vivaldi.Vivaldi"
             default: return "com.google.Chrome"
             }
+        }
+        if player == "Cinema" || player == "Media" {
+            if let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
+                return front
+            }
+            return "com.google.Chrome"
         }
         return nil
     }

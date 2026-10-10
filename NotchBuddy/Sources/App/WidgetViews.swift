@@ -977,6 +977,7 @@ struct CalendarCardView: View {
 struct RotatingVinylRecordView: View {
     let isPlaying: Bool
     let thumbnailUrl: String?
+    var artworkImage: NSImage? = nil
     let playerColor: String
     let playerIcon: String
     var discSize: CGFloat = 48
@@ -1041,7 +1042,13 @@ struct RotatingVinylRecordView: View {
                 // Center label circle (like the red center on a vinyl LP)
                 let labelSize = discSize * 0.44
                 ZStack {
-                    if let urlStr = thumbnailUrl, let url = URL(string: urlStr) {
+                    if let img = artworkImage {
+                        Image(nsImage: img)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: labelSize, height: labelSize)
+                            .clipShape(Circle())
+                    } else if let urlStr = thumbnailUrl, let url = URL(string: urlStr) {
                         AsyncImage(url: url) { phase in
                             switch phase {
                             case .success(let image):
@@ -1127,6 +1134,7 @@ struct NowPlayingCardView: View {
                 RotatingVinylRecordView(
                     isPlaying: manager.isPlaying,
                     thumbnailUrl: manager.thumbnailUrl,
+                    artworkImage: manager.artworkImage,
                     playerColor: manager.playerColor,
                     playerIcon: manager.playerIcon,
                     discSize: isMochiFloating ? 48 : 38
@@ -1156,6 +1164,9 @@ struct NowPlayingCardView: View {
                                         .font(.system(size: 6.5))
                                 } else if manager.player == "Spotify" {
                                     Image(systemName: "waveform")
+                                        .font(.system(size: 6.5))
+                                } else if manager.player == "Cinema" {
+                                    Image(systemName: "film.fill")
                                         .font(.system(size: 6.5))
                                 } else {
                                     Image(systemName: "music.note")

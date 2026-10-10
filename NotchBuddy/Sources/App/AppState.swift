@@ -394,6 +394,7 @@ final class AppState: ObservableObject {
 
     #if !APPSTORE
     @Published var musicPlaying: Bool = false
+    @Published var isWatchingMovie: Bool = false
     @Published var musicAutomationDenied: Bool = false
     #endif
 

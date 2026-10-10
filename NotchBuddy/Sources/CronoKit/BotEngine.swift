@@ -32,7 +32,7 @@ struct Tween {
 // MARK: - Particle
 
 struct Particle {
-    enum ParticleType { case heart, star, spark, sweat, z, musicNote }
+    enum ParticleType { case heart, star, spark, sweat, z, musicNote, popcorn }
     var type: ParticleType
     var x, y, vx, vy: CGFloat
     var age: Double        // seconds
@@ -267,6 +267,11 @@ final class BotEngine: ObservableObject {
     var isDancing: Bool = false
     var dancingLevel: CGFloat = 0   // 0→1 over 0.3s, 1→0 over 0.5s
 
+    // Cinema / Movie Watching
+    var isWatchingMovie: Bool = false
+    var movieLevel: CGFloat = 0     // 0→1 over 0.4s, 1→0 over 0.5s
+    var movieNextReaction: Double = CACurrentMediaTime() + 10.0
+
     // Mini wandering look (random, ignores mouse)
     var miniLookTarget: CGPoint = .zero
     var miniLookNextTime: Double = 0
@@ -473,11 +478,16 @@ final class BotEngine: ObservableObject {
         }
     }
 
-    // MARK: - Dancing
+    // MARK: - Dancing & Cinema Movie Mode
 
     func setDancing(_ dancing: Bool) {
         guard isDancing != dancing else { return }
         isDancing = dancing
+    }
+
+    func setWatchingMovie(_ watching: Bool) {
+        guard isWatchingMovie != watching else { return }
+        isWatchingMovie = watching
     }
 
     // MARK: - Mini periodic behavior loop
@@ -923,6 +933,44 @@ final class BotEngine: ObservableObject {
             dancingLevel = max(dancingTarget, dancingLevel - CGFloat(dt) / 0.5)
         }
 
+        // Cinema Movie Watching level: fade in 0.4s, out 0.5s
+        let movieTarget: CGFloat = isWatchingMovie ? 1 : 0
+        if movieLevel < movieTarget {
+            movieLevel = min(movieTarget, movieLevel + CGFloat(dt) / 0.4)
+        } else if movieLevel > movieTarget {
+            movieLevel = max(movieTarget, movieLevel - CGFloat(dt) / 0.5)
+        }
+
+        // Periodic Cinema Movie Reactions (munch popcorn, gasp, cheer)
+        if isWatchingMovie && movieLevel > 0.4 && now >= movieNextReaction && !isMini {
+            movieNextReaction = now + Double.random(in: 14...26)
+            let rollReaction = Int.random(in: 0...100)
+            if rollReaction < 50 {
+                // Popcorn munch chew squash + puff
+                anim("sy", keys: [
+                    TweenKey(target: 1.06, duration: 100, ease: Ease.inOut),
+                    TweenKey(target: 0.94, duration: 110, ease: Ease.inOut),
+                    TweenKey(target: 1.03, duration: 90,  ease: Ease.inOut),
+                    TweenKey(target: 1.0,  duration: 120, ease: Ease.back)
+                ])
+                emit(.popcorn, count: 1)
+            } else if rollReaction < 75 {
+                // Gasp / suspense reaction at exciting scenes
+                triggerEmote(.surprised, duration: 2.0, silent: true)
+                anim("oy", keys: [
+                    TweenKey(target: -0.15, duration: 130, ease: Ease.out),
+                    TweenKey(target: 0.0,   duration: 250, ease: Ease.back)
+                ])
+            } else {
+                // Cheerful smile / delighted nod
+                triggerEmote(.happy, duration: 2.2, silent: true)
+                anim("tilt", keys: [
+                    TweenKey(target: 0.10, duration: 160, ease: Ease.inOut),
+                    TweenKey(target: 0.0,  duration: 260, ease: Ease.back)
+                ])
+            }
+        }
+
         // Phys spring for hat/pompom lag
         let yawVel  = (yaw  - prevYaw)  / CGFloat(dt)
         let oyVel   = (oy   - prevOy)   / CGFloat(dt)
@@ -946,7 +994,7 @@ final class BotEngine: ObservableObject {
     /// Applies a 112-BPM dance bounce/sway around the bottom of the body.
     /// Call this on a copy of the GraphicsContext before the three draw passes.
     func applyDance(_ ctx: inout GraphicsContext, size: CGSize) {
-        guard dancingLevel > 0.001 else { return }
+        guard dancingLevel > 0.001 && movieLevel < 0.2 else { return }
         let W = size.width, H = size.height, R = W * 0.3
         let px = W / 2 + ox * R
         let py = H / 2 + particleOverhang / 2 + oy * R + R * 0.06 + R * 0.88
@@ -992,6 +1040,11 @@ final class BotEngine: ObservableObject {
 
         // Eyes
         drawEyes(ctx: &ctx, path: bodyPath, R: R, rx: rx, ry: ry)
+
+        // 3D Cinema Glasses (Cinema movie watching mode)
+        if movieLevel > 0.08 && !isMini && outfit != .sunglasses && outfit != .roundGlasses {
+            draw3DGlasses(ctx: &ctx, R: R, rx: rx, ry: ry)
+        }
 
         // Mouth hole — dark pill cutout inside the box face
         // Spec: left/right margins 0.10R, top margin 0.08R from box top (-0.94R)
@@ -1151,6 +1204,11 @@ final class BotEngine: ObservableObject {
         // Badge — hidden while morphing to mailbox
         if let badge = badge, badgeS > 0.01, morph < 0.25 {
             drawBadge(context: context, size: size, badge: badge, R: R, rx: rx, ry: ry, cx: cx, cy: cy)
+        }
+
+        // Popcorn bucket for Cinema movie mode
+        if movieLevel > 0.05 && !isMini {
+            drawPopcornBucket(context: context, size: size, R: R, cx: cx, cy: cy, rx: rx, ry: ry)
         }
 
         // Particles
@@ -1586,8 +1644,159 @@ final class BotEngine: ObservableObject {
                 pctx.rotate(by: .radians(sin(CGFloat(p.age) * 4) * 0.3))
                 pctx.draw(Text(p.rot > .pi ? "♪" : "♫").font(.system(size: sz * 1.6, weight: .bold)).foregroundColor(Color(hex: "#FA2D48")),
                           at: .zero)
+            case .popcorn:
+                pctx.rotate(by: .radians(p.rot + CGFloat(p.age) * 2.5))
+                let c1 = Color(hex: "#FEF08A")
+                let c2 = Color(hex: "#F59E0B")
+                var cluster = Path()
+                cluster.addEllipse(in: CGRect(x: -sz * 0.45, y: -sz * 0.4, width: sz * 0.6, height: sz * 0.6))
+                cluster.addEllipse(in: CGRect(x: -sz * 0.1, y: -sz * 0.5, width: sz * 0.65, height: sz * 0.65))
+                cluster.addEllipse(in: CGRect(x: -sz * 0.3, y: -sz * 0.1, width: sz * 0.6, height: sz * 0.55))
+                pctx.fill(cluster, with: .linearGradient(Gradient(colors: [c1, c2]), startPoint: CGPoint(x: 0, y: -sz * 0.5), endPoint: CGPoint(x: 0, y: sz * 0.3)))
             }
         }
+    }
+
+    // MARK: - Cinema Mode Drawing Helpers
+
+    private func draw3DGlasses(ctx: inout GraphicsContext, R: CGFloat, rx: CGFloat, ry: CGFloat) {
+        let mH = MochiH(R: R, yaw: yaw, pitch: pitch)
+        let rigidRoll = outfit != .none && outfitPresence > 0.05
+        var frames: [(sd: CGFloat, x: CGFloat, y: CGFloat, fx: CGFloat, fy: CGFloat)] = []
+        for f in mEyeFrames(mH) {
+            var eyePitch = MochiConst.eyeP + pitch + (rigidRoll ? 0 : roll)
+            eyePitch = ((eyePitch + .pi).truncatingRemainder(dividingBy: .pi*2) + .pi*2).truncatingRemainder(dividingBy: .pi*2) - .pi
+            let cp = cos(eyePitch)
+            let eyeYaw = f.sd * MochiConst.eyeSp + yaw
+            guard cos(eyeYaw) * cp > 0.04 else { continue }
+            let ey = f.y + (morph > 0 ? ry * 0.14 * morph : 0)
+            let fx = lerp(f.fx, 1, morph * 0.7)
+            let fy = lerp(f.fy, 1, morph * 0.7)
+            frames.append((sd: f.sd, x: f.x, y: ey, fx: fx, fy: fy))
+        }
+        guard frames.count >= 2,
+              let leftEye = frames.first(where: { $0.sd < 0 }),
+              let rightEye = frames.first(where: { $0.sd > 0 }) else { return }
+
+        let alpha = min(1.0, movieLevel)
+        var gCtx = ctx
+        gCtx.opacity = Double(alpha)
+
+        let lensW = R * MochiConst.eyeW * es * 1.55
+        let lensH = R * MochiConst.eyeH * es * 1.45
+        let cornerR = lensW * 0.32
+        let frameColor = Color(hex: "#18181B")
+
+        // Bridge connecting the two lenses
+        let bridgeY = (leftEye.y + rightEye.y) / 2 - lensH * 0.04
+        var bridge = Path()
+        bridge.move(to: CGPoint(x: leftEye.x + lensW * 0.42, y: bridgeY))
+        bridge.addQuadCurve(to: CGPoint(x: rightEye.x - lensW * 0.42, y: bridgeY),
+                            control: CGPoint(x: (leftEye.x + rightEye.x) / 2, y: bridgeY - lensH * 0.14))
+        gCtx.stroke(bridge, with: .color(frameColor), style: StrokeStyle(lineWidth: lensH * 0.22, lineCap: .round))
+
+        // Left frame & lens: Red 3D Anaglyph
+        var leftLensCtx = gCtx
+        leftLensCtx.translateBy(x: leftEye.x, y: leftEye.y)
+        leftLensCtx.scaleBy(x: leftEye.fx, y: leftEye.fy)
+        let leftRect = CGRect(x: -lensW/2, y: -lensH/2, width: lensW, height: lensH)
+        let leftPath = Path(roundedRect: leftRect, cornerRadius: cornerR)
+        leftLensCtx.fill(leftPath, with: .color(Color(red: 1.0, green: 0.12, blue: 0.28).opacity(0.68)))
+        leftLensCtx.stroke(leftPath, with: .color(frameColor), lineWidth: lensH * 0.16)
+
+        // Right frame & lens: Cyan 3D Anaglyph
+        var rightLensCtx = gCtx
+        rightLensCtx.translateBy(x: rightEye.x, y: rightEye.y)
+        rightLensCtx.scaleBy(x: rightEye.fx, y: rightEye.fy)
+        let rightRect = CGRect(x: -lensW/2, y: -lensH/2, width: lensW, height: lensH)
+        let rightPath = Path(roundedRect: rightRect, cornerRadius: cornerR)
+        rightLensCtx.fill(rightPath, with: .color(Color(red: 0.0, green: 0.88, blue: 0.98).opacity(0.68)))
+        rightLensCtx.stroke(rightPath, with: .color(frameColor), lineWidth: lensH * 0.16)
+
+        // Side temples
+        var leftHinge = Path()
+        leftHinge.move(to: CGPoint(x: leftEye.x - lensW * 0.46, y: leftEye.y))
+        leftHinge.addLine(to: CGPoint(x: leftEye.x - lensW * 0.70, y: leftEye.y - lensH * 0.05))
+        gCtx.stroke(leftHinge, with: .color(frameColor), style: StrokeStyle(lineWidth: lensH * 0.14, lineCap: .round))
+
+        var rightHinge = Path()
+        rightHinge.move(to: CGPoint(x: rightEye.x + lensW * 0.46, y: rightEye.y))
+        rightHinge.addLine(to: CGPoint(x: rightEye.x + lensW * 0.70, y: rightEye.y - lensH * 0.05))
+        gCtx.stroke(rightHinge, with: .color(frameColor), style: StrokeStyle(lineWidth: lensH * 0.14, lineCap: .round))
+    }
+
+    private func drawPopcornBucket(context: GraphicsContext, size: CGSize, R: CGFloat, cx: CGFloat, cy: CGFloat, rx: CGFloat, ry: CGFloat) {
+        guard movieLevel > 0.05 else { return }
+        let alpha = min(1.0, movieLevel)
+        var ctx = context
+        ctx.opacity = Double(alpha)
+
+        // Tilt with body
+        ctx.translateBy(x: cx, y: cy)
+        if tilt != 0 { ctx.rotate(by: .radians(tilt)) }
+        ctx.scaleBy(x: sx, y: sy)
+
+        // Position on lower right tummy
+        let bx = rx * 0.38
+        let by = ry * 0.44
+        ctx.translateBy(x: bx, y: by)
+
+        let bwTop = R * 0.38
+        let bwBot = R * 0.28
+        let bh = R * 0.42
+
+        // Bucket tub path (trapezoid)
+        var tub = Path()
+        tub.move(to: CGPoint(x: -bwTop/2, y: -bh/2))
+        tub.addLine(to: CGPoint(x: bwTop/2, y: -bh/2))
+        tub.addLine(to: CGPoint(x: bwBot/2, y: bh/2))
+        tub.addLine(to: CGPoint(x: -bwBot/2, y: bh/2))
+        tub.closeSubpath()
+
+        // White tub base
+        ctx.fill(tub, with: .color(Color(hex: "#F8FAFC")))
+
+        // Red vertical stripes (classic cinema popcorn)
+        var clipCtx = ctx
+        clipCtx.clip(to: tub)
+        let stripeW = bwTop / 5.5
+        for i in -3...3 {
+            let stX = CGFloat(i) * stripeW * 1.8
+            if i % 2 == 0 {
+                let stripeRect = CGRect(x: stX - stripeW/2, y: -bh/2 - 2, width: stripeW, height: bh + 4)
+                clipCtx.fill(Path(stripeRect), with: .color(Color(hex: "#E11D48")))
+            }
+        }
+
+        // Rim band
+        var rim = Path()
+        rim.addRoundedRect(in: CGRect(x: -bwTop*0.54, y: -bh/2 - R*0.04, width: bwTop*1.08, height: R*0.08), cornerSize: CGSize(width: R*0.03, height: R*0.03))
+        ctx.fill(rim, with: .color(Color(hex: "#E11D48")))
+
+        // Popcorn puffs overflowing top
+        let kernelColors: [Color] = [Color(hex: "#FEF08A"), Color(hex: "#FDE047"), Color(hex: "#F59E0B"), Color(hex: "#FEF9C3")]
+        let puffOffsets: [(CGFloat, CGFloat, CGFloat, Int)] = [
+            (-0.35, -0.65, 0.22, 0),
+            (-0.15, -0.78, 0.26, 1),
+            (0.08, -0.72, 0.24, 2),
+            (0.28, -0.62, 0.20, 3),
+            (-0.02, -0.56, 0.21, 0)
+        ]
+        for (ox, oy, sz, cIdx) in puffOffsets {
+            let pr = R * sz
+            let pRect = CGRect(x: bwTop * ox - pr/2, y: bh * oy - pr/2, width: pr, height: pr)
+            ctx.fill(Path(ellipseIn: pRect), with: .color(kernelColors[cIdx % kernelColors.count]))
+        }
+
+        // Tub outline shadow
+        ctx.stroke(tub, with: .color(Color.black.opacity(0.15)), lineWidth: 1)
+
+        // Little hand holding the side of the tub
+        let handR = R * 0.12
+        var hand = Path()
+        hand.addEllipse(in: CGRect(x: bwTop * 0.38 - handR/2, y: -bh * 0.05, width: handR, height: handR * 0.85))
+        ctx.fill(hand, with: .color(Color(cgColor: MochiConst.baseTop)))
+        ctx.stroke(hand, with: .color(Color.black.opacity(0.12)), lineWidth: 0.8)
     }
 
     // MARK: - Tween helpers
