@@ -603,7 +603,8 @@ final class NowPlayingManager: ObservableObject {
     }
 
     static func isCinemaPlayback(duration: Double, title: String, isFullscreen: Bool) -> Bool {
-        if duration >= 420.0 { return true }
+        // 4 minutes plus (>= 240s) indicates a movie, episode, or long-form video
+        if duration >= 240.0 { return true }
         if isFullscreen && (duration >= 90.0 || duration == 0) { return true }
         let lower = title.lowercased()
         let movieKeywords = ["movie", "hurawatch", "netflix", "film", "episode", "season", "s0", "e0", "prime video", "disney+", "plex", "hbo", "cinema", "brand new day"]
