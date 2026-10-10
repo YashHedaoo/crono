@@ -171,7 +171,11 @@ private enum MediaRemoteBridge {
 final class NowPlayingManager: ObservableObject {
     static let shared = NowPlayingManager()
 
-    @Published var isPlaying: Bool = false
+    @Published var isPlaying: Bool = false {
+        didSet {
+            AppState.shared.musicPlaying = isPlaying
+        }
+    }
     @Published var title: String = ""
     @Published var artist: String = ""
     @Published var album: String = ""

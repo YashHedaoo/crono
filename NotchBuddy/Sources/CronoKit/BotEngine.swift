@@ -32,7 +32,7 @@ struct Tween {
 // MARK: - Particle
 
 struct Particle {
-    enum ParticleType { case heart, star, spark, sweat, z }
+    enum ParticleType { case heart, star, spark, sweat, z, musicNote }
     var type: ParticleType
     var x, y, vx, vy: CGFloat
     var age: Double        // seconds
@@ -896,10 +896,11 @@ final class BotEngine: ObservableObject {
         }
 
         // Ambient particles
-        if now - lastAmbient > 1.3 {
+        if now - lastAmbient > 1.1 {
             lastAmbient = now
             if cfg.zz { emit(.z, count: 1) }   // ZZZ works for mini too
             if !isMini && cfg.sweat && Double.random(in: 0...1) < 0.5 { emit(.sweat, count: 1) }
+            if isDancing && dancingLevel > 0.3 { emit(.musicNote, count: 1) }
         }
 
         // Age particles
@@ -1580,6 +1581,10 @@ final class BotEngine: ObservableObject {
                 pctx.fill(drop, with: .color(Color(hex: "#7CC7FF")))
             case .z:
                 pctx.draw(Text("z").font(.system(size: sz*1.9, weight: .bold)).foregroundColor(Color(red: 0.82, green: 0.86, blue: 0.92)),
+                          at: .zero)
+            case .musicNote:
+                pctx.rotate(by: .radians(sin(CGFloat(p.age) * 4) * 0.3))
+                pctx.draw(Text(p.rot > .pi ? "♪" : "♫").font(.system(size: sz * 1.6, weight: .bold)).foregroundColor(Color(hex: "#FA2D48")),
                           at: .zero)
             }
         }

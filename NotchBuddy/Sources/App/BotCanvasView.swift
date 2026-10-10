@@ -48,15 +48,14 @@ struct BotCanvasView: View {
                     : nil
                 #endif
 
-                // Compute shouldDance per-frame (no observer lag)
+                // Compute shouldDance per-frame (active whenever music or video is playing)
                 let dancing: Bool = {
                     #if !APPSTORE
-                    guard AppState.shared.musicPlaying else { return false }
-                    guard AppState.shared.activeIntegrations.contains("integration_music") else { return false }
+                    let isMediaPlaying = AppState.shared.musicPlaying || NowPlayingManager.shared.isPlaying
+                    guard isMediaPlaying else { return false }
                     let allowed: Set<BotState> = [.idle, .working, .thinking, .searching, .finished]
                     guard allowed.contains(state.effectiveState) else { return false }
-                    if state.mode == .compact { return true }
-                    return state.mode == .expanded && state.view == .overview && state.focusId == "integration_music"
+                    return true
                     #else
                     return false
                     #endif
