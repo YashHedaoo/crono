@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Ignore SIGPIPE — prevents crash when nb-hook closes socket before we write response
         signal(SIGPIPE, SIG_IGN)
-        ProcessInfo.processInfo.disableAutomaticTermination("Crono background notch daemon")
+        ProcessInfo.processInfo.disableAutomaticTermination("Cruno background notch daemon")
         // Warm up Keychain cache on main thread BEFORE any poller or view touches it
         _ = KeychainStore.shared
         NSApp.setActivationPolicy(.accessory)
@@ -43,9 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenuBarItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem?.button else { return }
-        button.image = NSImage(named: "MenuBarIcon") ?? NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Crono")
+        button.image = NSImage(named: "MenuBarIcon") ?? NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Cruno")
         button.image?.size = NSSize(width: 24, height: 18)
-        button.image?.accessibilityDescription = "Crono"
+        button.image?.accessibilityDescription = "Cruno"
         button.image?.isTemplate = true
 
         let menu = NSMenu()
@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         demoMenuItem = demoItem
         menu.addItem(demoItem)
         menu.addItem(.separator())
-        menu.addItem(withTitle: NSLocalizedString("Open Crono", comment: ""), action: #selector(openIsland), keyEquivalent: "")
+        menu.addItem(withTitle: NSLocalizedString("Open Cruno", comment: ""), action: #selector(openIsland), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: NSLocalizedString("Weekly recap", comment: ""), action: #selector(openWeeklyRecap), keyEquivalent: "")
         menu.addItem(withTitle: NSLocalizedString("Settings…", comment: ""), action: #selector(openSettings), keyEquivalent: ",")

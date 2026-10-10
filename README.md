@@ -1,18 +1,18 @@
 <div align="center">
 
-<img src="NotchBuddy/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="96" alt="Crono icon">
+<img src="NotchBuddy/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="96" alt="Cruno icon">
 
-# Crono
+# Cruno
 
 **A tiny, always-on companion that lives in your Mac's notch — or at the top of your screen on Windows and Linux — and keeps an eye on your AI coding agents.**
 
-Mochi, the little squircle that lives in your screen's edge, shows you what your agents are doing, lets you approve permissions, answer questions, chat with a model, drop files and check your services — all without leaving what you're doing.
+Cruno, the little squircle that lives in your screen's edge, shows you what your agents are doing, lets you approve permissions, answer questions, chat with a model, drop files and check your services — all without leaving what you're doing.
 
-[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://github.com/YashHedaoo/crono)
-[![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/YashHedaoo/crono)
-[![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb%20%7C%20rpm-FCC624?logo=linux&logoColor=black)](https://github.com/YashHedaoo/crono)
-[![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://github.com/YashHedaoo/crono)
-[![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)](https://github.com/YashHedaoo/crono)
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://github.com/YashHedaoo/cruno)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/YashHedaoo/cruno)
+[![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb%20%7C%20rpm-FCC624?logo=linux&logoColor=black)](https://github.com/YashHedaoo/cruno)
+[![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://github.com/YashHedaoo/cruno)
+[![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)](https://github.com/YashHedaoo/cruno)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-green)](LICENSE)
 
 </div>
@@ -25,9 +25,9 @@ Mochi, the little squircle that lives in your screen's edge, shows you what your
 - **Approve and answer from the notch** — permission requests show **Allow / Deny / Always**; `AskUserQuestion` prompts show their choices right in the island.
 - **Live diffs** — every file edit shows `+N −M` in the ticker; tap to read the full diff.
 - **Chat** — talk to Claude, Gemini, OpenAI, or a local model (Ollama / LM Studio) directly from the island.
-- **Drop a file** — Mochi swallows it, then ask a question about it or send it by email.
-- **Integrations** — Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com, each with its own colored Mochi.
-- **Mochi on the desktop** *(macOS)* — drag him out of the island to float over your desktop; drag him onto any window to attach it as context for Claude.
+- **Drop a file** — Cruno swallows it, then ask a question about it or send it by email.
+- **Integrations** — Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com, each with its own colored pill.
+- **Cruno on the desktop** *(macOS)* — drag him out of the island to float over your desktop; drag him onto any window to attach it as context for Claude.
 - **A real character** — idle breathing, blinks, eyes that follow your cursor, emotes, 28 handcrafted sounds.
 - **Private by design** — no telemetry, no account. Keys live in your macOS Keychain, Windows Credential Manager or Linux Secret Service.
 
@@ -48,8 +48,8 @@ Mochi, the little squircle that lives in your screen's edge, shows you what your
 
 ```bash
 brew install xcodegen
-git clone https://github.com/YashHedaoo/crono.git
-cd crono/NotchBuddy
+git clone https://github.com/YashHedaoo/cruno.git
+cd cruno/NotchBuddy
 xcodegen                 # generates NotchBuddy.xcodeproj from project.yml
 open NotchBuddy.xcodeproj   # then press ⌘R to build & run
 ```
@@ -80,8 +80,8 @@ WebView2 ships with Windows 10/11 — nothing to install.
 **Run**
 
 ```powershell
-git clone https://github.com/YashHedaoo/crono.git
-cd crono/windows
+git clone https://github.com/YashHedaoo/cruno.git
+cd cruno/windows
 npm install
 npm run tauri dev        # live-reloading development build
 npm run pack             # installer lands in windows/release/
@@ -110,8 +110,8 @@ sudo apt install build-essential pkg-config \
   libwebkit2gtk-4.1-dev libgtk-layer-shell-dev libayatana-appindicator3-dev \
   librsvg2-dev libssl-dev libdbus-1-dev patchelf \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good
-git clone https://github.com/YashHedaoo/crono.git
-cd crono/windows
+git clone https://github.com/YashHedaoo/cruno.git
+cd cruno/windows
 npm install
 npm run tauri dev         # development build
 npm run pack              # AppImage, .deb and .rpm land in windows/release/
@@ -124,11 +124,11 @@ so there it runs through XWayland as a dock window at the top of the screen. See
 
 ## Setup
 
-Click the Crono icon in the menu bar (macOS) or in the system tray (Windows, Linux) → **Settings…**
+Click the Cruno icon in the menu bar (macOS) or in the system tray (Windows, Linux) → **Settings…**
 
 | What | Why | Where the key goes |
 |---|---|---|
-| **Claude Code hooks** | live sessions and approvals | **Install hooks** — Crono backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
+| **Claude Code hooks** | live sessions and approvals | **Install hooks** — Cruno backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
 | **Claude plan** *(macOS, GitHub build)* | Plan usage gauge in the notch header | **Install relay** in Settings → Agents → Plan usage, then enable "Show in the notch" |
 | **Gemini CLI hooks** *(macOS)* | Gemini CLI sessions in the island | **Install hooks** in Settings → Gemini CLI — backs up `~/.gemini/settings.json` |
 | **Antigravity (agy) hooks** *(macOS)* | agy sessions in the island | **Install hooks** in Settings → Antigravity — backs up `~/.gemini/config/hooks.json` |
@@ -140,7 +140,7 @@ Click the Crono icon in the menu bar (macOS) or in the system tray (Windows, Lin
 | **Active pills** *(macOS)* | choose which tools and agents appear in the island | Settings → Active pills |
 | Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the service pills | Keychain / Windows Credential Manager / Secret Service, all optional |
 
-If Crono isn't running, the hook exits immediately: **Claude Code is never blocked.**
+If Cruno isn't running, the hook exits immediately: **Claude Code is never blocked.**
 
 ### Supported agents
 
@@ -202,4 +202,4 @@ Inspired by the notch-companion concepts shared by design studios — this proje
 
 ---
 
-[GitHub](https://github.com/YashHedaoo/crono) · [Privacy](docs/privacy.html) · [Terms](docs/terms.html) · [Support](docs/support.html)
+[GitHub](https://github.com/YashHedaoo/cruno) · [Privacy](docs/privacy.html) · [Terms](docs/terms.html) · [Support](docs/support.html)

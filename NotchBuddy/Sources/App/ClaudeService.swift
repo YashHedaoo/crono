@@ -198,9 +198,9 @@ final class ClaudeService {
     /// neutral otherwise — same wording as the Windows build.
     private nonisolated static func makeSystemPrompt() -> String {
         let opening = if let firstName = resolveUserFirstName() {
-            "You are Mochi, \(firstName)'s personal AI assistant embedded in the notch of their Mac."
+            "You are Cruno, \(firstName)'s personal AI assistant embedded in the notch of their Mac."
         } else {
-            "You are Mochi, a personal AI assistant embedded in the notch of the user's Mac."
+            "You are Cruno, a personal AI assistant embedded in the notch of the user's Mac."
         }
         return """
         \(opening) \

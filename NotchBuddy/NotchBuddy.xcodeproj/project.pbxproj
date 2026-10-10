@@ -1107,7 +1107,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.NotchBuddy;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				PROVISIONING_PROFILE_SPECIFIER = "Crono Developer ID";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = PHONE_LINK;
@@ -1192,7 +1192,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.NotchBuddy;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				PROVISIONING_PROFILE_SPECIFIER = "Crono Developer ID";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = PHONE_LINK;
@@ -1221,7 +1221,7 @@
 				);
 				OTHER_CODE_SIGN_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1279,7 +1279,7 @@
 				);
 				OTHER_CODE_SIGN_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1299,7 +1299,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.NotchBuddy;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -1326,7 +1326,7 @@
 				);
 				OTHER_CODE_SIGN_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1433,7 +1433,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = APPSTORE;
 			};
@@ -1456,7 +1456,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "APPSTORE PHONE_LINK";
 			};
@@ -1476,7 +1476,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.NotchBuddy;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG PHONE_LINK";
 			};
@@ -1504,7 +1504,7 @@
 				);
 				OTHER_CODE_SIGN_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1555,7 +1555,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "APPSTORE PHONE_LINK";
 			};
@@ -1766,7 +1766,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yashhedaoo.Crono;
-				PRODUCT_NAME = Crono;
+				PRODUCT_NAME = Cruno;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = APPSTORE;
 			};

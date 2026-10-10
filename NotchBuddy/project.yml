@@ -124,8 +124,8 @@ targets:
     info:
       path: Resources/Info.plist
       properties:
-        CFBundleName: Crono
-        CFBundleDisplayName: Crono
+        CFBundleName: Cruno
+        CFBundleDisplayName: Cruno
         CFBundleIdentifier: com.yashhedaoo.NotchBuddy
         CFBundleVersion: "12"
         CFBundleShortVersionString: "0.2.1"
@@ -134,8 +134,8 @@ targets:
         NSHighResolutionCapable: YES
         NSSupportsAutomaticGraphicsSwitching: YES
         NSAppleEventsUsageDescription: "Pour sauter au terminal, envoyer des mails et piloter Musique."
-        NSCalendarsFullAccessUsageDescription: "Allow Chrono to save and sync events with your Calendar."
-        NSCalendarsUsageDescription: "Allow Chrono to save and sync events with your Calendar."
+        NSCalendarsFullAccessUsageDescription: "Allow Cruno to save and sync events with your Calendar."
+        NSCalendarsUsageDescription: "Allow Cruno to save and sync events with your Calendar."
         NSAccessibilityUsageDescription: "Pour lire le titre de la fenêtre active et l'attacher comme contexte."
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
@@ -153,7 +153,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.yashhedaoo.NotchBuddy
-        PRODUCT_NAME: Crono
+        PRODUCT_NAME: Cruno
         INFOPLIST_FILE: Resources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MACOSX_DEPLOYMENT_TARGET: "15.0"

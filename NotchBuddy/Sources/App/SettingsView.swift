@@ -153,7 +153,7 @@ struct SettingsView: View {
                             .resizable()
                             .frame(width: 32, height: 32)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Crono")
+                            Text("Cruno")
                                 .font(.system(size: 13, weight: .semibold))
                             Text(appVersion)
                                 .font(.system(size: 11))
@@ -313,7 +313,7 @@ struct SettingsView: View {
 
         GroupBox("Display") {
             VStack(alignment: .leading, spacing: 10) {
-                Picker("Show Mochi on", selection: $state.islandDisplay) {
+                Picker("Show Cruno on", selection: $state.islandDisplay) {
                     Text("Screen with the notch").tag(IslandDisplayChoice.notch)
                     Text("Main screen (menu bar)").tag(IslandDisplayChoice.menuBar)
                     Text("Follow the mouse").tag(IslandDisplayChoice.followMouse)
@@ -327,7 +327,7 @@ struct SettingsView: View {
                     }
                 }
                 .frame(maxWidth: 360)
-                Text("On a screen without a notch, Mochi sits in a small bar at the top. Follow the mouse moves it to your cursor's screen while it is closed.")
+                Text("On a screen without a notch, Cruno sits in a small bar at the top. Follow the mouse moves it to your cursor's screen while it is closed.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -414,7 +414,7 @@ struct SettingsView: View {
                     UserDefaults.standard.synchronize()
                 }
                 HStack(spacing: 8) {
-                    Button(String(localized: "Restart Crono")) {
+                    Button(String(localized: "Restart Cruno")) {
                         let appPath = Bundle.main.bundleURL.path
                         let pid = ProcessInfo.processInfo.processIdentifier
                         let task = Process()
@@ -475,7 +475,7 @@ struct SettingsView: View {
     @ViewBuilder private var activePillsSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Choose the tools you use. Crono only shows what you declare here.")
+                Text("Choose the tools you use. Cruno only shows what you declare here.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
 
@@ -946,7 +946,7 @@ struct SettingsView: View {
                     }
                 }
                 Divider()
-                Text("Shows your Codex plan usage (weekly limit and free resets left) in the notch header. Crono asks the Codex CLI (codex app-server) when the pill shows; nothing is installed. Codex must be signed in with ChatGPT.")
+                Text("Shows your Codex plan usage (weekly limit and free resets left) in the notch header. Cruno asks the Codex CLI (codex app-server) when the pill shows; nothing is installed. Codex must be signed in with ChatGPT.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
