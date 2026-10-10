@@ -122,7 +122,7 @@ struct IslandContainer: View {
 
             Group {
                 if state.mode == .compact {
-                    CompactMiniGrid(state: state)
+                    CompactRightWingView(state: state)
                         .scaleEffect(IslandRestingLayout(width: islandWidth, height: islandHeight).miniGridScale)
                         .position(x: islandWidth - 40, y: islandHeight / 2)
                         .transition(.opacity)
@@ -737,3 +737,183 @@ struct CompactMiniGrid: View {
         .frame(width: 28, height: 28)
     }
 }
+
+// MARK: - Compact Music Ring View (Animated Rotating Ring + Mini Vinyl Record)
+
+struct CompactMusicRingView: View {
+    @ObservedObject var nowPlaying: NowPlayingManager
+    var isHovered: Bool = false
+
+    var body: some View {
+        ZStack {
+            // 1. Dynamic Outer Running Aura Ring (Neon light ring racing around the circumference)
+            TimelineView(.animation(paused: !nowPlaying.isPlaying)) { timeline in
+                let rot = nowPlaying.isPlaying
+                    ? (timeline.date.timeIntervalSinceReferenceDate * 120).truncatingRemainder(dividingBy: 360)
+                    : 0.0
+
+                ZStack {
+                    // Soft glow halo
+                    Circle()
+                        .stroke(Color(hex: nowPlaying.playerColor).opacity(nowPlaying.isPlaying ? 0.4 : 0.12), lineWidth: 2.2)
+                        .frame(width: 26, height: 26)
+                        .blur(radius: 1.5)
+
+                    // Sharp running light trace
+                    Circle()
+                        .strokeBorder(
+                            AngularGradient(
+                                gradient: Gradient(colors: [
+                                    Color(hex: nowPlaying.playerColor),
+                                    Color(hex: nowPlaying.playerColor).opacity(0.12),
+                                    Color(hex: nowPlaying.playerColor).opacity(0.95),
+                                    Color(hex: nowPlaying.playerColor).opacity(0.05),
+                                    Color(hex: nowPlaying.playerColor)
+                                ]),
+                                center: .center,
+                                startAngle: .degrees(rot),
+                                endAngle: .degrees(rot + 360)
+                            ),
+                            lineWidth: 1.4
+                        )
+                        .frame(width: 26, height: 26)
+                }
+            }
+
+            // 2. Realistic Mini Rotating Vinyl Disc
+            RotatingVinylRecordView(
+                isPlaying: nowPlaying.isPlaying,
+                thumbnailUrl: nowPlaying.thumbnailUrl,
+                playerColor: nowPlaying.playerColor,
+                playerIcon: nowPlaying.playerIcon,
+                discSize: 22
+            )
+            .shadow(color: Color.black.opacity(0.55), radius: 2, x: 0, y: 1)
+
+            // 3. Subtle center indicator badge when paused
+            if !nowPlaying.isPlaying {
+                Circle()
+                    .fill(Color.black.opacity(0.6))
+                    .frame(width: 13, height: 13)
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 5.5, weight: .bold))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+        }
+        .frame(width: 28, height: 28)
+        .scaleEffect(isHovered ? 1.08 : 1.0)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
+    }
+}
+
+// MARK: - Compact Right Wing (Smart Switcher between Music Ring & Mini Bots Grid)
+
+struct CompactRightWingView: View {
+    @ObservedObject var state: AppState
+    @ObservedObject private var nowPlaying = NowPlayingManager.shared
+
+    @State private var musicRingActiveUntil: Date = .distantPast
+    @State private var lastSeenTitle: String = ""
+    @State private var isHovered: Bool = false
+
+    /// Duration (in seconds) the ring actively takes spotlight whenever music starts or changes track
+    private let spotlightDuration: TimeInterval = 25.0
+
+    private var hasActiveAgentWork: Bool {
+        for task in state.tasks {
+            if task.id == state.focusId { continue }
+            if task.state == .working || task.state == .thinking || task.state == .searching || task.state == .approval || task.state == .question {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Whether the music ring should be shown right now
+    private var shouldShowMusicRing: Bool {
+        if !nowPlaying.isPlaying && Date() >= musicRingActiveUntil {
+            return false
+        }
+        if Date() < musicRingActiveUntil {
+            return true
+        }
+        return !hasActiveAgentWork
+    }
+
+    var body: some View {
+        ZStack {
+            if shouldShowMusicRing {
+                CompactMusicRingView(nowPlaying: nowPlaying, isHovered: isHovered)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.7).combined(with: .opacity),
+                        removal: .scale(scale: 0.7).combined(with: .opacity)
+                    ))
+                    .onTapGesture {
+                        activateNowPlaying()
+                    }
+                    .help(nowPlaying.title.isEmpty ? "Now Playing (\(nowPlaying.player))" : "\(nowPlaying.title) • \(nowPlaying.artist)")
+            } else {
+                CompactMiniGrid(state: state)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.7).combined(with: .opacity),
+                        removal: .scale(scale: 0.7).combined(with: .opacity)
+                    ))
+                    .onTapGesture {
+                        if nowPlaying.isPlaying {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                musicRingActiveUntil = Date().addingTimeInterval(spotlightDuration)
+                            }
+                        } else {
+                            NotificationCenter.default.post(name: .hookExpand, object: IslandView.overview)
+                        }
+                    }
+            }
+        }
+        .frame(width: 28, height: 28)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onAppear {
+            lastSeenTitle = nowPlaying.title
+            if nowPlaying.isPlaying {
+                musicRingActiveUntil = Date().addingTimeInterval(spotlightDuration)
+            }
+        }
+        .onChange(of: nowPlaying.isPlaying) { _, playing in
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                if playing {
+                    musicRingActiveUntil = Date().addingTimeInterval(spotlightDuration)
+                } else {
+                    // Graceful 4-second spin-down when paused before reverting
+                    musicRingActiveUntil = Date().addingTimeInterval(4.0)
+                }
+            }
+        }
+        .onChange(of: nowPlaying.title) { _, newTitle in
+            if nowPlaying.isPlaying && !newTitle.isEmpty && newTitle != lastSeenTitle {
+                lastSeenTitle = newTitle
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    musicRingActiveUntil = Date().addingTimeInterval(spotlightDuration)
+                }
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.75), value: shouldShowMusicRing)
+    }
+
+    private func activateNowPlaying() {
+        if !state.tasks.contains(where: { $0.id == "widget_nowplaying" }) {
+            state.addTask(AgentTask(
+                id: "widget_nowplaying",
+                name: "Now Playing",
+                color: nowPlaying.playerColor,
+                state: .idle,
+                steps: [],
+                source: .agent
+            ))
+        }
+        state.setFocus("widget_nowplaying")
+        NotificationCenter.default.post(name: .hookExpand, object: IslandView.overview)
+    }
+}
+
