@@ -54,8 +54,39 @@ private enum MediaRemoteBridge {
         return unsafeBitCast(sym, to: MRIsPlayingFunc.self)
     }()
 
-    static func isApplicationPlaying() async -> Bool {
+    struct SystemMediaInfo: Sendable {
+        let title: String
+        let artist: String
+        let playbackRate: Double
+    }
+
+    typealias MRGetInfoFunc = @convention(c) (DispatchQueue, @escaping ([String: Any]?) -> Void) -> Void
+
+    private static let getInfoFunc: MRGetInfoFunc? = {
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_NOW),
+              let sym = dlsym(handle, "MRMediaRemoteGetNowPlayingInfo") else {
+            return nil
+        }
+        return unsafeBitCast(sym, to: MRGetInfoFunc.self)
+    }()
+
+    static func getNowPlayingInfo() async -> SystemMediaInfo? {
         await withCheckedContinuation { continuation in
+            if let fn = getInfoFunc {
+                fn(DispatchQueue.global()) { info in
+                    let title = info?["kMRMediaRemoteNowPlayingInfoTitle"] as? String ?? ""
+                    let artist = info?["kMRMediaRemoteNowPlayingInfoArtist"] as? String ?? ""
+                    let rate = (info?["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? NSNumber)?.doubleValue ?? 0.0
+                    continuation.resume(returning: SystemMediaInfo(title: title, artist: artist, playbackRate: rate))
+                }
+            } else {
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    static func isApplicationPlaying() async -> Bool {
+        let appPlaying = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             if let fn = isPlayingFunc {
                 fn(DispatchQueue.global()) { playing in
                     continuation.resume(returning: playing)
@@ -64,6 +95,15 @@ private enum MediaRemoteBridge {
                 continuation.resume(returning: false)
             }
         }
+        if appPlaying { return true }
+
+        // Also check NowPlayingInfo playback rate (crucial for browsers like Chrome/Safari where rate == 1)
+        if let info = await getNowPlayingInfo() {
+            if info.playbackRate > 0.0 {
+                return true
+            }
+        }
+        return false
     }
 
     typealias MRRegisterFunc = @convention(c) (DispatchQueue) -> Void
@@ -222,10 +262,8 @@ final class NowPlayingManager: ObservableObject {
                 guard let self else { return }
                 guard Date() >= self.commandCooldownUntil else { return }
                 let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
-                // Re-check: a command may have been issued during the async call above.
                 guard Date() >= self.commandCooldownUntil else { return }
-                // YouTube play state is driven by DOM — MediaRemote not reliable for browsers
-                if self.player != "YouTube" && !self.spotifyIsPlaying && !self.musicIsPlaying {
+                if !self.spotifyIsPlaying && !self.musicIsPlaying {
                     if self.youtubeIsPlaying != isSystemPlaying || self.isPlaying != isSystemPlaying {
                         self.youtubeIsPlaying = isSystemPlaying
                         self.isPlaying = isSystemPlaying
@@ -241,6 +279,15 @@ final class NowPlayingManager: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard Date() >= self.commandCooldownUntil else { return }
+                let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
+                guard Date() >= self.commandCooldownUntil else { return }
+                if !self.spotifyIsPlaying && !self.musicIsPlaying {
+                    if self.youtubeIsPlaying != isSystemPlaying || self.isPlaying != isSystemPlaying {
+                        self.youtubeIsPlaying = isSystemPlaying
+                        self.isPlaying = isSystemPlaying
+                    }
+                }
                 await self.scanForYouTubePlayback()
             }
         }
@@ -255,11 +302,12 @@ final class NowPlayingManager: ObservableObject {
                 guard let self else { break }
                 if Date() >= self.commandCooldownUntil {
                     let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
-                    // Re-check after await — a togglePlayPause() may have fired during the call.
                     if Date() >= self.commandCooldownUntil {
-                        // YouTube play state is driven by DOM query in scanForYouTubePlayback — skip here
-                        if !self.player.isEmpty && self.player != "Spotify" && self.player != "Apple Music" && self.player != "YouTube" {
-                            self.isPlaying = isSystemPlaying
+                        if !self.spotifyIsPlaying && !self.musicIsPlaying {
+                            if self.youtubeIsPlaying != isSystemPlaying || self.isPlaying != isSystemPlaying {
+                                self.youtubeIsPlaying = isSystemPlaying
+                                self.isPlaying = isSystemPlaying
+                            }
                         }
                     }
                 }
@@ -355,6 +403,15 @@ final class NowPlayingManager: ObservableObject {
                 self.youtubeUrl = url
                 self.lastYouTubeTabSeenAt = Date()
 
+                // Check MediaRemote for live track title & artist if available
+                if let mrInfo = await MediaRemoteBridge.getNowPlayingInfo(), !mrInfo.title.isEmpty {
+                    let mrParsed = Self.parseYouTubeTitle(mrInfo.title)
+                    self.youtubeTitle = mrParsed.title
+                    if !mrInfo.artist.isEmpty {
+                        self.youtubeArtist = mrInfo.artist
+                    }
+                }
+
                 if Date() >= self.commandCooldownUntil {
                     // "false" = video.paused is false = playing; "true" = paused
                     let domPausedRaw = parts.count >= 4 ? parts[3].trimmingCharacters(in: .whitespacesAndNewlines) : "unknown"
@@ -362,7 +419,7 @@ final class NowPlayingManager: ObservableObject {
 
                     if let isPlaying = domIsPlaying {
                         // DOM ground truth — no MediaRemote call needed
-                        if self.youtubeIsPlaying != isPlaying {
+                        if self.youtubeIsPlaying != isPlaying || self.isPlaying != isPlaying {
                             self.youtubeIsPlaying = isPlaying
                             self.isPlaying = isPlaying
                         }
@@ -370,8 +427,10 @@ final class NowPlayingManager: ObservableObject {
                         // JavaScript unavailable — fall back to MediaRemote
                         let isSystemPlaying = await MediaRemoteBridge.isApplicationPlaying()
                         if Date() >= self.commandCooldownUntil {
-                            self.youtubeIsPlaying = isSystemPlaying
-                            self.isPlaying = isSystemPlaying
+                            if self.youtubeIsPlaying != isSystemPlaying || self.isPlaying != isSystemPlaying {
+                                self.youtubeIsPlaying = isSystemPlaying
+                                self.isPlaying = isSystemPlaying
+                            }
                         }
                     }
                 }
